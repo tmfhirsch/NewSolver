@@ -23,7 +23,7 @@ struct asym_αβlml_ket
     β :: atom_nos
     l :: Int
     ml :: Int
-    asym_αβlmₗ_ket(α,β,l,ml) = abs(mₗ)<=l ? new(α,β,l,ml) : error("abs(mₗ)>l")
+    asym_αβlml_ket(α,β,l,ml) = abs(ml)<=l ? new(α,β,l,ml) : error("abs(mₗ)>l")
 end
 
 # symmetric state, used to represent scattering states
@@ -32,11 +32,20 @@ struct scat_αβlml_ket
     β :: atom_nos
     l :: Int
     ml :: Int
-    asym_αβlmₗ_ket(α,β,l,ml) = α.i==β.i && abs(ml)<=l ? new(α,β,l,ml) : error("i₁≠i₂ || abs(mₗ)>l")
+    scat_αβlml_ket(α,β,l,ml) = α.i==β.i && abs(ml)<=l ? new(α,β,l,ml) : error("i₁≠i₂ || abs(mₗ)>l")
 end
 
-# Evaluator of matrix elements for symmetric states, by expanding into asym states
-function sym_eval(op, bra::scat_αβlmₗ_ket, ket::scat_αβlmₗ_ket, p...)
+# evaluator of matrix elements for symmetric or asymmetric states
+function αβlml_eval(op,
+    bra::Union{scat_αβlml_ket,asym_αβlml_ket}, ket::Union{scat_αβlml_ket,asym_αβlml_ket},
+    p...)
+    # sanity check
+    @assert typeof(bra)==typeof(ket) "Mismatched asymmetric & symmetric bra/ket"
+    # simple case of asymmetric states: passes straight through to the operator
+    if typeof(bra)==asym_αβlml_ket
+        return op(bra,ket,p...)
+    end
+    # symmetric state case: expands into asymmetric states
     α_,β_ = bra.α,bra.β;        α,β = ket.α,ket.β # atomic numbers
     iₐ_, iᵦ_ = α_.i, β_.i;      iₐ, iᵦ = α.i, β.i # nuclear spins, for Bose/Fermi ±
     l_, ml_ = bra.l, bra.ml;    l,ml = ket.l, ket.ml # angular momenta, for symmetry factor and constructing asym states
@@ -48,8 +57,85 @@ function sym_eval(op, bra::scat_αβlmₗ_ket, ket::scat_αβlmₗ_ket, p...)
     return prefac*(t1+t2+t3+t4)
 end
 
-# Generate all symmetrised scattering states for a particular choice of i
-
-# Generate all asymmetrised scattering states, setting α.i=3, β.i =4
+# Generate hyperfine scattering states for 3-3, 3-4, and 4-4 collisions
+function αβlml_lookup_generator(flag::String, lmax::Int)
+    # sanity checks
+    @assert flag ∈ ["3-3","3-4","4-4"] "flag ∉ [3-3,3-4,4-4]"
+    @assert lmax >= 0 "lmax < 0"
+    Sₐ,Sᵦ = 1, 1 # He* => atomic spin 1
+    if flag=="3-4" # asymmetric case
+        lookup=Array{asym_αβlml_ket,1}([]) # initialise lookup
+        iₐ,iᵦ = half(1), 0 # α is ³He, β is ⁴He
+        for l=0:lmax
+            for ml=-l:l
+                for fₐ=abs(Sₐ-iₐ):(Sₐ+iₐ) # iterate atom α
+                    for mₐ=(-fₐ):fₐ
+                        α=atom_nos(Sₐ,iₐ,fₐ,mₐ)
+                        for fᵦ=abs(Sᵦ-iᵦ):(Sᵦ+iᵦ) # iterate atom β
+                            for mᵦ=(-fᵦ):fᵦ
+                                β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
+                                state=asym_αβlml_ket(α,β,l,ml)
+                                push!(lookup,state)
+                            end # mᵦ
+                        end # fᵦ
+                    end # mₐ
+                end # fₐ
+            end # ml
+        end # l
+    elseif flag=="4-4" # symmetric ⁴He* case
+        lookup=Array{scat_αβlml_ket,1}([])
+        iₐ,iᵦ=0,0 # Bosonic ⁴He*
+        for l=0:lmax
+            for ml=-l:l
+                for fₐ=abs(Sₐ-iₐ):(Sₐ+iₐ) # iterate atom α
+                    for mₐ=(-fₐ):fₐ
+                        α=atom_nos(Sₐ,iₐ,fₐ,mₐ)
+                        for fᵦ=max(fₐ,abs(Sᵦ-iᵦ)):(Sᵦ+iᵦ) # iterate atom β
+                            for mᵦ=max(mₐ,-fᵦ):fᵦ
+                                β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
+                                α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
+                                state=scat_αβlml_ket(α,β,l,ml)
+                                push!(lookup,state)
+                            end #mᵦ
+                        end #fᵦ
+                    end #mₐ
+                end #fₐ
+            end # ml
+        end #l
+        # self-check for double counting
+        for ket in lookup
+            ket.α==ket.β && continue
+            ketflip = scat_αβlml_ket(ket.β,ket.α,ket.l,ket.ml)
+            @assert ketflip ∉ lookup "Double counted $ket"
+        end
+    elseif flag=="3-3" #Symmetric ³He* case
+        lookup=Array{scat_αβlml_ket,1}([])
+        iₐ,iᵦ=half(1),half(1) # Bosonic ⁴He*
+        for l=0:lmax
+            for ml=-l:l
+                for fₐ=abs(Sₐ-iₐ):(Sₐ+iₐ) # iterate atom α
+                    for mₐ=(-fₐ):fₐ
+                        α=atom_nos(Sₐ,iₐ,fₐ,mₐ)
+                        for fᵦ=max(fₐ,abs(Sᵦ-iᵦ)):(Sᵦ+iᵦ) # iterate atom β
+                            for mᵦ=max(mₐ,-fᵦ):fᵦ
+                                β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
+                                α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
+                                state=scat_αβlml_ket(α,β,l,ml)
+                                push!(lookup,state)
+                            end #mᵦ
+                        end #fᵦ
+                    end #mₐ
+                end #fₐ
+            end # ml
+        end #l
+        # self-check for double counting
+        for ket in lookup
+            ket.α==ket.β && continue
+            ketflip = scat_αβlml_ket(ket.β,ket.α,ket.l,ket.ml)
+            @assert ketflip ∉ lookup "Double counted $ket"
+        end
+    end # flag 'if' statement
+    return lookup
+end
 
 end # module
