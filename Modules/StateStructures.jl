@@ -5,6 +5,7 @@ Description last edited 7/12/2020=#
 module StateStructures
 using HalfIntegers
 
+export asym_αβlml_ket, scat_αβlml_ket, αβlml_eval, αβlml_lookup_generator, atom_nos
 # Hyperfine basis states
 
 # (Sⱼiⱼfₖmₖ), atomic quantum numbers
@@ -50,11 +51,11 @@ function αβlml_eval(op,
     iₐ_, iᵦ_ = α_.i, β_.i;      iₐ, iᵦ = α.i, β.i # nuclear spins, for Bose/Fermi ±
     l_, ml_ = bra.l, bra.ml;    l,ml = ket.l, ket.ml # angular momenta, for symmetry factor and constructing asym states
     prefac = 1/(2*sqrt(1+(α==β ? 1 : 0))*sqrt(1+(α_==β_ ? 1 : 0))) # normalising prefactor
-    t1 = op(asym_αβlml_ket(α_,β_,l_,ml_), asym_αβlmₗ_ket(α,β,l,ml), p...) # first term
-    t2 = (-1)^(iₐ_+iᵦ_+l_)*op(asym_αβlml_ket(β_,α_,l_,ml_), asym_αβlmₗ_ket(α,β,l,ml), p...) # second term
-    t3 = (-1)^(iₐ+iᵦ+l)*op(asym_αβlml_ket(α_,β_,l_,ml_), asym_αβlmₗ_ket(β,α,l,ml), p...) # third term
-    t4 = (-1)^(iₐ_+iᵦ_+l_)*(-1)^(iₐ+iᵦ+l)*op(asym_αβlml_ket(β_,α_,l_,ml_), asym_αβlmₗ_ket(β,α,l,ml), p...) # fourth term
-    return prefac*(t1+t2+t3+t4)
+    t1 = op(asym_αβlml_ket(α_,β_,l_,ml_), asym_αβlml_ket(α,β,l,ml), p...) # first term
+    t2 = (-1)^(iₐ_+iᵦ_+l_) .* op(asym_αβlml_ket(β_,α_,l_,ml_), asym_αβlml_ket(α,β,l,ml), p...) # second term
+    t3 = (-1)^(iₐ+iᵦ+l) .* op(asym_αβlml_ket(α_,β_,l_,ml_), asym_αβlml_ket(β,α,l,ml), p...) # third term
+    t4 = (-1)^(iₐ_+iᵦ_+l_) .* (-1)^(iₐ+iᵦ+l) .* op(asym_αβlml_ket(β_,α_,l_,ml_), asym_αβlml_ket(β,α,l,ml), p...) # fourth term
+    return prefac .* (t1 .+ t2 .+ t3 .+ t4) # broadcast over arrays of linear coupling coefficients
 end
 
 # Generate hyperfine scattering states for 3-3, 3-4, and 4-4 collisions
