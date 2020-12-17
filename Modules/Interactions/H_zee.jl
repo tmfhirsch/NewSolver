@@ -17,8 +17,8 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
             for ket_S=abs(ket.α.S-ket.β.S):(ket.α.S+ket.β.S), ket_mS=-ket_S:ket_S
                 # skip if the clebschgordan is zero
                 clebschgordan(ket.α.S,ket_mS_α, ket.β.S,ket_mS_β, ket_S,ket_mS)==0 && continue
-                ######################
-                # expand out bra
+                ###################### expand out bra
+                # decouple α
                 for bra_mS_α=-bra.α.S:bra.α.S, bra_mi_α=-bra.α.i:bra.α.i
                     # skip if the clebschgordan is zero
                     clebschgordan(bra.α.S,bra_mS_α, bra.α.i,bra_mi_α, bra.α.f,bra.α.m)==0 && continue
@@ -32,7 +32,7 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
                             clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)==0 && continue
                             # have now expanded into a nontrivial |SmS> bra/ket combination
                             # first, δ fn as H_zee diag in this basis (neglecting nuclear spin => diag in mi_α,mi_β)
-                            (bra_S,bra_mS,bra_mi_α,bra_mi_α)==(ket_S,ket_mS,ket_mi_α,ket_mi_β) || continue
+                            (bra_S,bra_mS,bra_mi_α,bra_mi_β)==(ket_S,ket_mS,ket_mi_α,ket_mi_β) || continue
                             # Zeeman energy is just constant * S
                             S_z = (ket_mS)*1u"ħ"
                             result += uconvert(u"hartree",-0.5u"e_au/me_au"*gₛ*B*S_z)
