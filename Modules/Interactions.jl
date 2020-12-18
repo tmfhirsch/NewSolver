@@ -1,7 +1,7 @@
 #= Interactions as functions of |Φₐ⟩=|S₁S₂SmSlml⟩ states, radial dist. R and μ=#
 
 module Interactions
-export H_rot, H_el_coeffs, H_el_radial, H_sd_coeffs, H_sd_radial, H_zee, H_hfs
+export H_rot, H_el_coeffs, H_el_radial, H_sd_coeffs, H_sd_radial, H_zee, H_hfs, Γ_GMS_coeffs, Γ_GMS_radial
 
 using Unitful, UnitfulAtomic
 
@@ -26,5 +26,8 @@ include("./Interactions/H_zee.jl")
 # hyperfine
 using HalfIntegers
 include("./Interactions/H_hfs.jl")
+
+# ionisation
+include("./Interactions/Ionisation.jl")
 
 end # module

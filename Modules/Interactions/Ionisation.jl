@@ -1,10 +1,13 @@
-const gₛ = 2.00231930436256 # Electron spin g-facctor
+#= Γ_GMS ionisation interaction, diagonal in |SmS⟩ basis and therefore nondiagonal
+in hyperfine basis.
+Description last updated 18/12/20=#
 
-function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
+# coupling coefficient. Multiply by 0.3*exp(-R/1.086) Eh, R in a₀, for value
+function Γ_GMS_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
     # δ fn on |S₁,S₂,i₁,i₂,l,ml>
-    (bra.α.S,bra.β.S, bra.α.i,bra.β.i, bra.l,bra.ml)==(ket.α.S,ket.β.S, ket.α.i,ket.β.i, ket.l,ket.ml) || return 0u"hartree"
+    (bra.α.S,bra.β.S, bra.α.i,bra.β.i, bra.l,bra.ml)==(ket.α.S,ket.β.S, ket.α.i,ket.β.i, ket.l,ket.ml) || return 0
     # Passed initial δ fn, time to expand into SmS basis
-    result=0u"hartree" # final energy accumulates in this variable
+    result=0 # final result accumulates in this variable
     # expand out ket
     for ket_mS_α=-ket.α.S:ket.α.S, ket_mi_α=-ket.α.i:ket.α.i
         # skip if the clebschgordan is zero
@@ -40,9 +43,9 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
                                   clebschgordan(bra.α.S,bra_mS_α, bra.α.i,bra_mi_α, bra.α.f,bra.α.m)*
                                   clebschgordan(bra.β.S,bra_mS_β, bra.β.i,bra_mi_β, bra.β.f,bra.β.m)*
                                   clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)
-                            # Zeeman energy is just constant * S
-                            S_z = (ket_mS)*1u"ħ"
-                            result += uconvert(u"hartree",-0.5u"e_au/me_au"*gₛ*B*S_z)*coeff
+                            # imaginary potential added for S=0,1
+                            Γ = ket_S∈[0,1] ? 1 : 0
+                            result += Γ*coeff
                         end # bra S
                     end # bra β
                 end # bra α
@@ -51,3 +54,6 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
     end # ket α
     result
 end
+
+# radial factor (Cocks et al. 2019)
+Γ_GMS_radial(R::Unitful.Length) = -im/2*0.3*exp(-R/1.086u"bohr")*1u"hartree"

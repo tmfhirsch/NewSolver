@@ -1,7 +1,8 @@
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 
-using Interactions, StateStructures, Channels
-using Unitful, UnitfulAtomic
+using Interactions, StateStructures, Channels, Solvers
+using Unitful, UnitfulAtomic, LinearAlgebra
+using OrdinaryDiffEq
 
 lmax=4
 
@@ -37,3 +38,7 @@ end
 ch33=ch_matrix(lookup33,B)
 ch34=ch_matrix(lookup34,B)
 ch44=ch_matrix(lookup44,B)
+
+lhs,rhs=5u"bohr",10u"bohr"
+locs=LinRange(lhs,rhs,2)
+IC44=[fill(0e0u"bohr",l44,l44); I]

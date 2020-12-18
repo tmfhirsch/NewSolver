@@ -20,7 +20,7 @@ end
 function H_sd_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
     # apply Delta function (nuclear spins not involved)
     (ket.α.i, ket.β.i)==(bra.α.i, bra.β.i) || return 0
-    coeff=0
+    result=0
     # decouple α in ket
     for ket_mS_α=-ket.α.S:ket.α.S, ket_mi_α=-ket.α.i:ket.α.i
         # skip if the clebschgordan is zero
@@ -48,7 +48,14 @@ function H_sd_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
                             # skip if the clebschgordan is zero
                             clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)==0 && continue
                             # have now expanded into the |SmS> basis, where my Honours code can work
-                            coeff += H_sd_SmS_coeffs(bra.α.S,bra.β.S,bra_S,bra_mS,bra.l,bra.ml,
+                            # coeffs of this sum term
+                            coeff=clebschgordan(ket.α.S,ket_mS_α, ket.α.i,ket_mi_α, ket.α.f,ket.α.m)*
+                                  clebschgordan(ket.β.S,ket_mS_β, ket.β.i,ket_mi_β, ket.β.f,ket.β.m)*
+                                  clebschgordan(ket.α.S,ket_mS_α, ket.β.S,ket_mS_β, ket_S,ket_mS)*
+                                  clebschgordan(bra.α.S,bra_mS_α, bra.α.i,bra_mi_α, bra.α.f,bra.α.m)*
+                                  clebschgordan(bra.β.S,bra_mS_β, bra.β.i,bra_mi_β, bra.β.f,bra.β.m)*
+                                  clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)
+                            result += coeff*H_sd_SmS_coeffs(bra.α.S,bra.β.S,bra_S,bra_mS,bra.l,bra.ml,
                                                      ket.α.S,ket.β.S,ket_S,ket_mS,ket.l,ket.ml)
                         end # bra S, mS
                     end # ket S, mS
@@ -56,7 +63,7 @@ function H_sd_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
             end # bra α mS, mi
         end # ket β mS, mi
     end # ket α mS, mi
-    coeff
+    result
 end
 
 
