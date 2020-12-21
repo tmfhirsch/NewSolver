@@ -96,34 +96,24 @@ end
 """Re-orthogonalising DE solver. Takes a list of R values and solves from first
 to last, re-orthogonalising at every interim value."""
 function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1}},
-                    IC, ϵ::Unitful.Energy, locs;
-                    B::Unitful.BField=0u"T", μ::Unitful.Mass=0.5*4.002602u"u")
+                    IC, ϵ::Unitful.Energy,
+                    M_el, M_sd, M_zee, M_Γ,
+                    locs,
+                    B::Unitful.BField, μ::Unitful.Mass)
     # sanity checks on Rs
     @assert length(locs)>=2 "length(locs) < 2"
     @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R∈locs are lengths"
-    # precalculate coefficient matrices for nondiag interactions
+    # sanity checks on precalculated matrices
     n=length(lookup)
-    @assert size(IC,1)==2*n "IC does not have 2*length(lookup) rows" # sanity check
-    M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,n,n)
-    M_sd, M_Γ = zeros(n,n), zeros(n,n)
-    M_zee = zeros(n,n)u"hartree" # H_zee is entirely precalculated
-    @info "Precalculating matrices"
-    @time for i=1:n,j=1:n
-        M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
-        M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
-        M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
-        M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
-    end
+    @assert size(M_el)==size(M_sd)==size(M_zee)==size(M_Γ)==(n,n) "Precalculated matrices not of size n×n"
     # initialise Q, R arrays
-    Qs, Rs = [IC], [Matrix(I,n,n)]
+    Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,n,n)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making Q have units
-    @info "Beginning DE solving"
     for k=1:(length(locs)-1)
         lhs, rhs = locs[k], locs[k+1] # left and right bounds
         # solve, last stored Q being the IC
         sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,lhs,rhs,B,μ)
         ψ=sol(rhs) # solution evaluated at rhs
-        @info "up to here, k=$k"
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
         push!(Rs,ψQR.R) # save R
