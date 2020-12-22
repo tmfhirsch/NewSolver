@@ -98,7 +98,7 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
                                 state=scat_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end #mᵦ
-                        end #fᵦ
+                        end #fᵦ2
                     end #mₐ
                 end #fₐ
             end # ml

@@ -104,16 +104,16 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     @assert length(locs)>=2 "length(locs) < 2"
     @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R∈locs are lengths"
     # sanity checks on precalculated matrices
-    n=length(lookup)
+    n=length(lookup); ncols=size(IC,2)
     @assert size(M_el)==size(M_sd)==size(M_zee)==size(M_Γ)==(n,n) "Precalculated matrices not of size n×n"
     # initialise Q, R arrays
-    Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,n,n)])
+    Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making Q have units
     for k=1:(length(locs)-1)
-        lhs, rhs = locs[k], locs[k+1] # left and right bounds
+        start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,lhs,rhs,B,μ)
-        ψ=sol(rhs) # solution evaluated at rhs
+        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,B,μ)
+        ψ=sol(finish) # solution evaluated at rhs
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
         push!(Rs,ψQR.R) # save R

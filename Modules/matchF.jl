@@ -25,10 +25,8 @@ function F_matrix(AL,AR,BL,BR)
     @assert size(AL)==size(AR) "AL and AR have unlike dimensions"
     @assert size(BL)==size(BR) "BL and BR have unlike dimensions"
     @assert size(AL,1)==size(BL,1) "AL/AR and BL/BR have unlike numbers of rows"
-    @assert size(AL,1)==2*length(isOpen) "Number of rows of AL/AR/BL/BR not equal
-        to 2* number of rows of isOpen vector"
     # numbers of channel, for reference
-    N = size(AL,1) # N channels
+    N = size(AL,1)÷2 # N channels
     Nₒ = size(BL,2)-N # Nₒ open channels
     # take QR decomposition
     Q = qr(austrip.(permutedims([AR -BL]))).Q
