@@ -10,6 +10,38 @@ using OrdinaryDiffEq
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using StateStructures, Interactions
 
+#########################Callback object
+mutable struct RenormCallback
+    maxvalsqr::Float64
+    transform::Vector{Float64}
+end
+# ...
+function CreateRenormCallback(maxval::Float64, n::Int)
+    obj = RenormCallback(maxval^2, ones(n))
+    condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
+    DiscreteCallback(condition, obj, save_positions=(false,false))
+end
+
+function (obj::RenormCallback)(int)
+    maxval = sqrt.(maximum(abs2.(int.u), dims=1))
+    int.u ./= maxval
+    obj.transform ./= maxval
+    @debug "Renormalised" int.t
+    u_modified!(int,true)
+    nothing
+end
+#= Psuedocode example
+callback = CreateRenormCallback(1e2, num_dims)
+solve(...., callback=callback)
+Q,R = qr(sol)
+callback.transform = R * callback.transform
+solve(...., callback=callback)
+Q,R = qr(sol)
+callback.transform = R * callback.transform
+first = last * callback.transform
+(last * Mn * Mn-1 * Rn * Rn-1 * Mn-2 * Rn-2....)=#
+#########################################
+
 """Callback function for renormalisation of wavefunction. Code by DC"""
 function CreateRenormalisedCallback(maxval=1e5)
     maxvalsqr = maxval^2
@@ -19,7 +51,7 @@ end
 function _Renormalise!(int)
     maxval = sqrt.(maximum(abs2.(int.u), dims=1))
     int.u ./= maxval
-    for i = eachindex(int.sol.u)
+    for i = eachindex(int.sol.u) # retroactively normalises solution history
         int.sol.u[i] ./= maxval
     end
     nothing
@@ -31,7 +63,7 @@ end
     ϵ, the energy; M_el, M_sd, M_zee, M_Γ, the precalculated coefficient
     matrices for the corresponding non-diagonal interactions;
     lhs and rhs, the start/end points; B and μ, the external magnetic field
-    and effective collisional mass.
+    and effective collisional mass;
     Output: Solution to numerically integrating the TISE, from IC at lhs to rhs."""
 function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1}},
                 IC, ϵ::Unitful.Energy,
