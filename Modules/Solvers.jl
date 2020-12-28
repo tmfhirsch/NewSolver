@@ -10,14 +10,15 @@ using OrdinaryDiffEq
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using StateStructures, Interactions
 
-#########################Callback object
+# Callback code by Danny Cocks (edited minorly by Tim Hirsch)
 mutable struct RenormCallback
     maxvalsqr::Float64
     transform::Vector{Float64}
 end
-# ...
+
 function CreateRenormCallback(maxval::Float64, n::Int)
-    obj = RenormCallback(maxval^2, ones(n))
+    maxvalsqr=maxval^2
+    obj = RenormCallback(maxvalsqr, ones(n))
     condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
     DiscreteCallback(condition, obj, save_positions=(false,false))
 end
@@ -25,51 +26,27 @@ end
 function (obj::RenormCallback)(int)
     maxval = sqrt.(maximum(abs2.(int.u), dims=1))
     int.u ./= maxval
-    obj.transform ./= maxval
+    @assert size(maxval)==(1,length(obj.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
+    obj.transform ./= maxval[1,:] # can't directly broadcast a vector with a 1xN matrix
     @debug "Renormalised" int.t
     u_modified!(int,true)
     nothing
 end
-#= Psuedocode example
-callback = CreateRenormCallback(1e2, num_dims)
-solve(...., callback=callback)
-Q,R = qr(sol)
-callback.transform = R * callback.transform
-solve(...., callback=callback)
-Q,R = qr(sol)
-callback.transform = R * callback.transform
-first = last * callback.transform
-(last * Mn * Mn-1 * Rn * Rn-1 * Mn-2 * Rn-2....)=#
-#########################################
 
-"""Callback function for renormalisation of wavefunction. Code by DC"""
-function CreateRenormalisedCallback(maxval=1e5)
-    maxvalsqr = maxval^2
-    condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
-    DiscreteCallback(condition, _Renormalise!, save_positions=(true,false))
-end
-function _Renormalise!(int)
-    maxval = sqrt.(maximum(abs2.(int.u), dims=1))
-    int.u ./= maxval
-    for i = eachindex(int.sol.u) # retroactively normalises solution history
-        int.sol.u[i] ./= maxval
-    end
-    nothing
-end
-
-
+# following by Tim Hirsch
 """ TISE solver
     lookup, the lookup vector; IC, the initial wavefunction matrix (at lhs);
     ϵ, the energy; M_el, M_sd, M_zee, M_Γ, the precalculated coefficient
     matrices for the corresponding non-diagonal interactions;
     lhs and rhs, the start/end points; B and μ, the external magnetic field
-    and effective collisional mass;
+    and effective collisional mass; callback, for storing renormalisations
     Output: Solution to numerically integrating the TISE, from IC at lhs to rhs."""
 function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1}},
                 IC, ϵ::Unitful.Energy,
                 M_el, M_sd, M_zee, M_Γ,
                 lhs::Unitful.Length, rhs::Unitful.Length,
-                B::Unitful.BField, μ::Unitful.Mass)
+                B::Unitful.BField, μ::Unitful.Mass,
+                callback::DiscreteCallback)
     # Check length and units of IC
     n = length(lookup) # number of channels
     @assert size(IC)[1]==2*n "Initial condition has wrong number of channels"
@@ -116,7 +93,6 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
     IC⁰ = austrip.(complex.(IC))
     # solve
     prob=ODEProblem(TISE,IC⁰,(lhs⁰,rhs⁰))
-    callback=CreateRenormalisedCallback()
     sol_unitless=solve(prob,Tsit5(),reltol=1e-10,save_start=true,save_end=true,save_everystep=false,dense=false,
     callback=callback)
     # add units back
@@ -131,20 +107,23 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
                     IC, ϵ::Unitful.Energy,
                     M_el, M_sd, M_zee, M_Γ,
                     locs,
-                    B::Unitful.BField, μ::Unitful.Mass)
+                    B::Unitful.BField, μ::Unitful.Mass;
+                    maxval=1e5) # maxval defines when to renormalise
     # sanity checks on Rs
     @assert length(locs)>=2 "length(locs) < 2"
     @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R∈locs are lengths"
     # sanity checks on precalculated matrices
     n=length(lookup); ncols=size(IC,2)
     @assert size(M_el)==size(M_sd)==size(M_zee)==size(M_Γ)==(n,n) "Precalculated matrices not of size n×n"
+    # initialise callback
+    callback=CreateRenormCallback(maxval,ncols)
     # initialise Q, R arrays
     Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making Q have units
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,B,μ)
+        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,B,μ,callback)
         ψ=sol(finish) # solution evaluated at rhs
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
@@ -154,7 +133,8 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     for R in reverse(Rs)
         ψ=ψ*R # reverse the orthogonalisation process
     end
-    return ψ
+    IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
+    return ψ, IC
 end
 
 end # module

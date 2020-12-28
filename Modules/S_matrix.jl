@@ -29,7 +29,7 @@ function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.
     isOpen=Vector{Bool}([]) # initialise isOpen
     kOpen=Vector{typeof(0e0u"bohr^-1")}([]) # initialise kOpen
     lOpen=Vector{Int}([]) # initialise lOpen
-    for i in 1:N
+    for i in 1:length(D∞)
         k²=ksq[i]
         if k² > 0u"bohr^-2" # positive energy ⟺ open channel
             push!(isOpen, true)
@@ -47,9 +47,9 @@ end
     Parameters: lhs, mid, rhs, rrhs, spacings between reorthogonalising,, μ~[M]
     Output: S_output object containing the scattering matrix, flag, lmax, ϵ, B"""
 function S_matrix(flag::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
-    lhs::Unitful.Length=3e0u"bohr", mid::Unitful.Length=5e1u"bohr",
+    lhs::Unitful.Length=3e0u"bohr", mid::Unitful.Length=5e0u"bohr",
     rhs::Unitful.Length=2e2u"bohr", rrhs::Unitful.Length=1e6u"bohr",
-    lhs2mid_spacing::Unitful.Length=5e0u"bohr", rhs2mid_spacing::Unitful.Length=1e1u"bohr",
+    lhs2mid_spacing::Unitful.Length=1e0u"bohr", rhs2mid_spacing::Unitful.Length=1e1u"bohr",
     rhs2rrhs_spacing::Unitful.Length=1e4u"bohr",
     μ::Unitful.Mass=0.5*4.002602u"u")
     # Generate lookup, form channels
@@ -84,7 +84,7 @@ function S_matrix(flag::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField
     M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,N,N)
     M_sd, M_Γ = zeros(N,N), zeros(N,N)
     M_zee = zeros(N,N)u"hartree" # H_zee is entirely precalculated (no radial fn)
-    for i=1:N,j=1:N
+    for i=1:N,j=1:N # fill in coefficient arrays
         M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
         M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
         M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
@@ -110,12 +110,12 @@ function S_matrix(flag::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField
         locs
     end
     # solve lhs → mid ← rhs
-    AR = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, B, μ)
-    BL = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, B, μ)
+    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, B, μ)
+    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, B, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
     # solve F out to rrhs before matching to bessel functions
-    F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)
+    F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)[1] # [1] bc only need final value
     F = [inv(P) zeros(N,N)u"bohr";
          zeros(N,N)u"bohr^-1" inv(P)]*F # change F to channel basis
     F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
