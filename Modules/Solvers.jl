@@ -27,7 +27,7 @@ function (obj::RenormCallback)(int)
     maxval = sqrt.(maximum(abs2.(int.u), dims=1))
     int.u ./= maxval
     @assert size(maxval)==(1,length(obj.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
-    obj.transform ./= maxval[1,:] # can't directly broadcast a vector with a 1xN matrix
+    obj.transform ./= vec(maxval) # can't directly broadcast a vector with a 1xN matrix
     @debug "Renormalised" int.t
     u_modified!(int,true)
     nothing

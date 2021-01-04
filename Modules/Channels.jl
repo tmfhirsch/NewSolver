@@ -31,9 +31,7 @@ function l0l1_eigenvecs(lookup::Union{Array{scat_αβlml_ket,1},Array{asym_αβl
     end
     # lmax ≧ 1 case. First, identify l=1 indices
     l1start=findfirst(ϕ->ϕ.l==1,lookup) # start of l=1 part
-    l1end = let l2start=findfirst(ϕ->ϕ.l==2,lookup)
-        isnothing(l2start) ? n : l2start-1 # lmax=1 case ⟹ go to end of lookup
-    end
+    l1end = findlast(ϕ->ϕ.l==1,lookup)
     H∞_l0=Array{Unitful.Energy,2}(zeros(l1start-1,l1start-1)u"hartree")
     for i=1:(l1start-1), j=1:(l1start-1)
         H∞_l0[i,j] =αβlml_eval(H_zee,lookup[i],lookup[j],B)
