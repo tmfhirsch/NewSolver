@@ -150,14 +150,15 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
 end
 
 #################################Testing########################################
-coltype="3-3"; lmax=0; ϵ=1e-12u"hartree"; B=0u"T";
+coltype="4-4"; lmax=1; ϵ=1e-12u"hartree"; B=0u"T";
 lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
 lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
 μ=0.5*4.002602u"u";
 
 iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
 diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
-lookup=diff_lookup
+lookup=diff_lookup # playing around w/ lookup vec of |α≠β⟩ states
+
 N=length(lookup) # total number of computational states, incl. |lml>
 P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
 # generate 𝐤sq, vector of asymptotic k² values for channels
