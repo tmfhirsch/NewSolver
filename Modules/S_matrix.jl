@@ -12,15 +12,6 @@ using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers
 
-""" Data structure for containing a scattering matrix and the initial conditions
-that produced it """
-struct S_output
-    S :: Array{Complex{Float64},2}
-    flag :: String
-    lmax :: Int
-    ϵ :: Unitful.Energy
-    B :: Unitful.BField
-end
 
 # generates isOpen, kOpen, lOpen vectors from a list of asymptotic energies
 function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.Mass, lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}})
@@ -45,22 +36,22 @@ end
     Input: flag∈["3-3","3-4","4-4"], lmax, ϵ~[E], B~[BField]
     Parameters: lhs, mid, rhs, rrhs, spacings between reorthogonalising,, μ~[M]
     Output: S_output object containing the scattering matrix, flag, lmax, ϵ, B"""
-function S_matrix(flag::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
-    lhs::Unitful.Length=3e0u"bohr", mid::Unitful.Length=5e0u"bohr",
-    rhs::Unitful.Length=2e2u"bohr", rrhs::Unitful.Length=1e6u"bohr",
-    lhs2mid_spacing::Unitful.Length=1e0u"bohr", rhs2mid_spacing::Unitful.Length=1e1u"bohr",
-    rhs2rrhs_spacing::Unitful.Length=1e4u"bohr",
-    μ::Unitful.Mass=0.5*4.002602u"u")
-    # Generate lookup, form channels
-    lookup=αβlml_lookup_generator(flag, lmax)
+function S_matrix(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}},
+    ϵ::Unitful.Energy, B::Unitful.BField,
+    lhs::Unitful.Length, mid::Unitful.Length,
+    rhs::Unitful.Length, rrhs::Unitful.Length,
+    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length,
+    rhs2rrhs_spacing::Unitful.Length,
+    μ::Unitful.Mass)
+    ################
     N=length(lookup) # total number of computational states, incl. |lml>
-    P=ch_matrix(lookup,B) # change-of-basis matrix, *from channel to computational basis*
+    P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
     # generate 𝐤sq, vector of asymptotic k² values for channels
     H∞=Array{Unitful.Energy,2}(zeros(N,N)u"hartree") # initialise H∞, comp basis asymptotic hamiltonian
     for i=1:N, j=1:N
         H∞[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)+αβlml_eval(H_hfs,lookup[i],lookup[j]) # only H_zee and H_hfs at infinite distance
     end
-    D∞ = Vector{Unitful.Energy}(diag(inv(P)*H∞*P)) # change to diagonal (channel) basis
+    D∞ = Vector{Unitful.Energy}(diag(Pinv*H∞*P)) # change to diagonal (channel) basis
     @assert length(D∞)==N "length(ksq) ≠ length(lookup)" # sanity check
     isOpen, kOpen, lOpen = isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
     Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
@@ -115,33 +106,66 @@ function S_matrix(flag::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField
     F = F_matrix(AL, AR, BL, BR)
     # solve F out to rrhs before matching to bessel functions
     F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)[1] # [1] bc only need final value
-    F = [inv(P) zeros(N,N)u"bohr";
-         zeros(N,N)u"bohr^-1" inv(P)]*F # change F to channel basis
+    F = [Pinv zeros(N,N)u"bohr";
+         zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
     F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
     𝐊 = K_matrix(rrhs, F, kOpen, lOpen)
     @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
     𝐒 = (I+im*𝐊)*inv(I-im*𝐊)
-    S_output(𝐒, flag, lmax, ϵ, B)
 end
 
 #end # module
 
+""" Data structure for containing scattering matrices for a simulation,
+ and the initial conditions of that simulation"""
+struct S_output
+    diff_S :: Matrix{Complex{Float64}}
+    iden_S :: Matrix{Complex{Float64}}
+    coltype :: String # "3-3" etc
+    lmax :: Int
+    ϵ :: Unitful.Energy
+    B :: Unitful.BField
+end
 
-################################################################################
-# testing S_matrix
 
-flag="4-4"; lmax=0; ϵ=1e-8u"hartree"; B=0u"T"; lhs=3e0u"bohr"; mid=5e0u"bohr";
-rhs=2e2u"bohr"; rrhs=1e3u"bohr"; lhs2mid_spacing=1e0u"bohr";
-rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr"; μ=0.5*4.002602u"u";
-lookup=αβlml_lookup_generator(flag, lmax)
+""" Runs simulation to give scattering matrices for identical and different lookup vectors.
+    Output: S_output containing S_matrices for iden_ and diff_ |αβ⟩, their
+    associated CoB matrices and lookup vectors, plus initial conditions"""
+function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
+    lhs::Unitful.Length=3e0u"bohr", mid::Unitful.Length=5e0u"bohr",
+    rhs::Unitful.Length=2e2u"bohr", rrhs::Unitful.Length=1e4u"bohr",
+    lhs2mid_spacing::Unitful.Length=1e0u"bohr", rhs2mid_spacing::Unitful.Length=1e1u"bohr",
+    rhs2rrhs_spacing::Unitful.Length=1e2u"bohr",
+    μ::Unitful.Mass=0.5*4.002602u"u")
+    # generate two different lookup vectors
+    iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
+    diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
+    # generate scattering matrix in each case
+    # skipping calculation if the lookup vectors are empty (lmax=0 can produce this scenario)
+    iden_S = length(iden_lookup)>0 ? S_matrix(iden_lookup, ϵ, B, lhs, mid, rhs, rrhs,
+    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing, μ) : Matrix{Complex{Float64}}(undef,0,0)
+    diff_S = length(diff_lookup)>0 ? S_matrix(diff_lookup, ϵ, B, lhs, mid, rhs, rrhs,
+    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing, μ) : Matrix{Complex{Float64}}(undef,0,0)
+    S_output(diff_S, iden_S, coltype, lmax, ϵ, B)
+end
+
+#################################Testing########################################
+coltype="3-3"; lmax=0; ϵ=1e-12u"hartree"; B=0u"T";
+lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
+lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
+μ=0.5*4.002602u"u";
+
+iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
+diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
+lookup=diff_lookup
 N=length(lookup) # total number of computational states, incl. |lml>
-P=ch_matrix(lookup,B) # change-of-basis matrix, *from channel to computational basis*
+P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
 # generate 𝐤sq, vector of asymptotic k² values for channels
 H∞=Array{Unitful.Energy,2}(zeros(N,N)u"hartree") # initialise H∞, comp basis asymptotic hamiltonian
 for i=1:N, j=1:N
     H∞[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)+αβlml_eval(H_hfs,lookup[i],lookup[j]) # only H_zee and H_hfs at infinite distance
 end
-D∞ = Vector{Unitful.Energy}(diag(inv(P)*H∞*P)) # change to diagonal (channel) basis
+D∞ = Vector{Unitful.Energy}(diag(Pinv*H∞*P)) # change to diagonal (channel) basis
 @assert length(D∞)==N "length(ksq) ≠ length(lookup)" # sanity check
 isOpen, kOpen, lOpen = isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
 Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
@@ -196,10 +220,9 @@ BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, B, �
 F = F_matrix(AL, AR, BL, BR)
 # solve F out to rrhs before matching to bessel functions
 F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)[1] # [1] bc only need final value
-F = [inv(P) zeros(N,N)u"bohr";
-     zeros(N,N)u"bohr^-1" inv(P)]*F # change F to channel basis
+F = [Pinv zeros(N,N)u"bohr";
+     zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
 F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
 𝐊 = K_matrix(rrhs, F, kOpen, lOpen)
 @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
 𝐒 = (I+im*𝐊)*inv(I-im*𝐊)
-S_output(𝐒, flag, lmax, ϵ, B)

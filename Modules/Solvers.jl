@@ -20,16 +20,19 @@ function CreateRenormCallback(maxval::Float64, n::Int)
     maxvalsqr=maxval^2
     obj = RenormCallback(maxvalsqr, ones(n))
     condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
-    DiscreteCallback(condition, obj, save_positions=(false,false))
+    DiscreteCallback(condition, obj, save_positions=(true,false))
 end
 
 function (obj::RenormCallback)(int)
     maxval = sqrt.(maximum(abs2.(int.u), dims=1))
     int.u ./= maxval
+    for i = eachindex(int.sol.u)
+        int.sol.u[i] ./= maxval
+    end
     @assert size(maxval)==(1,length(obj.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
     obj.transform ./= vec(maxval) # can't directly broadcast a vector with a 1xN matrix
     @debug "Renormalised" int.t
-    u_modified!(int,true)
+    #u_modified!(int,true)
     nothing
 end
 
@@ -111,7 +114,7 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
                     maxval=1e5) # maxval defines when to renormalise
     # sanity checks on Rs
     @assert length(locs)>=2 "length(locs) < 2"
-    @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R∈locs are lengths"
+    @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R ∈ locs are lengths"
     # sanity checks on precalculated matrices
     n=length(lookup); ncols=size(IC,2)
     @assert size(M_el)==size(M_sd)==size(M_zee)==size(M_Γ)==(n,n) "Precalculated matrices not of size n×n"

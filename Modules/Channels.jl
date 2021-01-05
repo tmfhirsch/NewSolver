@@ -13,7 +13,7 @@ push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHY
 using Interactions, StateStructures
 
 """ Input: lookup (all α=β ⊻ all α≠β), B
-    Output: P, Pinv, both ~ n×n where n=length(lookup)"""
+    Output: P, Pinv --- both ~ n×n where n=length(lookup) --- and P-block --- for interpreting channels."""
 function P_Pinv(lookup::Union{Vector{scat_αβlml_ket},Vector{asym_αβlml_ket}},
     B::Unitful.BField)
     # first, sanity check that lookup kets are all α=β or α≠β, alike
