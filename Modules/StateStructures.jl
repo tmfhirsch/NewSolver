@@ -59,12 +59,13 @@ function αβlml_eval(op,
 end
 
 # Generate hyperfine scattering states for 3-3, 3-4, and 4-4 collisions
-function αβlml_lookup_generator(flag::String, lmax::Int)
+function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
     # sanity checks
-    @assert flag ∈ ["3-3","3-4","4-4"] "flag ∉ [3-3,3-4,4-4]"
+    @assert coltype ∈ ["3-3","3-4","4-4"] "coltype ∉ [3-3,3-4,4-4]"
+    @assert sameness ∈ ["iden","diff"] "sameness ∉ [iden, diff]"
     @assert lmax >= 0 "lmax < 0"
     Sₐ,Sᵦ = 1, 1 # He* => atomic spin 1
-    if flag=="3-4" # asymmetric case
+    if coltype=="3-4" # asymmetric case
         lookup=Array{asym_αβlml_ket,1}([]) # initialise lookup
         iₐ,iᵦ = half(1), 0 # α is ³He, β is ⁴He
         for l=0:lmax
@@ -75,6 +76,8 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
                         for fᵦ=abs(Sᵦ-iᵦ):(Sᵦ+iᵦ) # iterate atom β
                             for mᵦ=(-fᵦ):fᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
+                                # only store |α==β⟩ or |α!=β⟩ as desired
+                                sameness=="diff" ||  continue # simplifies for 3-4
                                 state=asym_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end # mᵦ
@@ -83,7 +86,7 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
                 end # fₐ
             end # ml
         end # l
-    elseif flag=="4-4" # symmetric ⁴He* case
+    elseif coltype=="4-4" # symmetric ⁴He* case
         lookup=Array{scat_αβlml_ket,1}([])
         iₐ,iᵦ=0,0 # Bosonic ⁴He*
         for l=0:lmax
@@ -95,6 +98,8 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
                             for mᵦ=max(mₐ,-fᵦ):fᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
+                                # only store |α==β⟩ or |α!=β⟩ as desired
+                                (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
                                 state=scat_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end #mᵦ
@@ -109,7 +114,7 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
             ketflip = scat_αβlml_ket(ket.β,ket.α,ket.l,ket.ml)
             @assert ketflip ∉ lookup "Double counted $ket"
         end
-    elseif flag=="3-3" #Symmetric ³He* case
+    elseif coltype=="3-3" #Symmetric ³He* case
         lookup=Array{scat_αβlml_ket,1}([])
         iₐ,iᵦ=half(1),half(1) # Bosonic ⁴He*
         for l=0:lmax
@@ -121,6 +126,8 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
                             for mᵦ=max(mₐ,-fᵦ):fᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
+                                # only store |α==β⟩ or |α!=β⟩ as desired
+                                (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
                                 state=scat_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end #mᵦ
@@ -135,7 +142,7 @@ function αβlml_lookup_generator(flag::String, lmax::Int)
             ketflip = scat_αβlml_ket(ket.β,ket.α,ket.l,ket.ml)
             @assert ketflip ∉ lookup "Double counted $ket"
         end
-    end # flag 'if' statement
+    end # coltype 'if' statement
     return lookup
 end
 
