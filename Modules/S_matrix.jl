@@ -160,7 +160,6 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     return σ_el, σ_ion, Pb
 end
 
-
 """ Runs simulation to give scattering matrices for identical and different lookup vectors.
     Output: S_output containing S_matrices for iden_ and diff_ |αβ⟩, their
     associated CoB matrices and lookup vectors, plus initial conditions"""
@@ -209,7 +208,7 @@ end
 #################################Testing########################################
 
 
-coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.01u"T";
+coltype="3-3"; lmax=0; ϵ=1e-7u"hartree"; B=0.01u"T";
 lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
 lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
 μ=0.5*4.002602u"u";

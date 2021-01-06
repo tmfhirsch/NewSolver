@@ -12,7 +12,6 @@ function E_hfs(α::atom_nos)
     return 0u"hartree" # triplet spin defined as zero energy
 end
 
-
 # hyperfine interaction
 function H_hfs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
     bra == ket || return 0u"hartree"
