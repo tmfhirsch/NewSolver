@@ -149,8 +149,42 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
     S_output(diff_S, iden_S, coltype, lmax, ϵ, B)
 end
 
+
 #################################Testing########################################
-coltype="4-4"; lmax=1; ϵ=1e-12u"hartree"; B=0u"T";
+""" Produces elastic and ionisation cross sections from scattering matrix,
+    kOpen vector and lb n"""
+function calc_σ(S, kOpen::Vector{typeof(0e0u"bohr^-1")}, lb::Int)
+    @assert mod(length(kOpen), lb)==0 "mod(length(kOpen), lb)≠0"
+    nb=div(length(kOpen),lb) # number of blocks
+    @assert size(S)==(nb*lb,nb*lb) "Size of S ≠ (no. blocks × length of block)²"
+    kᵧ = kOpen[1:lb] # wavenumbers of the different channels
+    Tsq = abs2.(I-S) # transmission coefficients, for el cs
+    Ssq = abs2.(S) # square of S-matrix, for ion cs
+    # initialise cross sections
+    σ_el = zeros(lb, lb)u"bohr^2"
+    σ_ion = zeros(lb)u"bohr^2"
+    prefacs=(x->π/x^2).(kᵧ)
+    # fill in elastic
+    for i=1:lb, j=1:lb
+        σ_sum=0.0
+        for kx=0:(nb-1), ky=0:(nb-1)
+            σ_sum += Tsq[i+kx*lb, j+ky*lb] # sum over boxes, taking [i,j] coord of each box
+        end
+        σ_el[i,j]=prefacs[j]*σ_sum
+    end
+    # fill in inelastic
+    for i=1:lb
+        σ_sum=0.0
+        for k=0:(nb-1) # sum over same channel in diff. boxes
+            σ_sum += 1 - sum(Ssq[:, i+k*lb]) # sum down column ↔ all nonunitary outgoing
+        end
+        σ_ion[i]=prefacs[i]*σ_sum
+    end
+    return σ_el, σ_ion
+end
+
+
+coltype="4-4"; lmax=2; ϵ=1e-12u"hartree"; B=0u"T";
 lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
 lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
 μ=0.5*4.002602u"u";
@@ -227,3 +261,8 @@ F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
 𝐊 = K_matrix(rrhs, F, kOpen, lOpen)
 @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
 𝐒 = (I+im*𝐊)*inv(I-im*𝐊)
+# calculate cross sections
+lb = let lookupOpen=lookup[isOpen] # lookupOpen is physically meaningless
+    findlast(x->x.l==lookupOpen[1].l && x.ml==lookupOpen[1].ml,lookupOpen) # length of a block = number of channels
+end
+σ_el, σ_ion = calc_σ(𝐒, kOpen, lb)
