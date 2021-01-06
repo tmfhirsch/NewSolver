@@ -32,11 +32,44 @@ function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.
     return isOpen, kOpen, lOpen
 end
 
-""" Calculates S matrix of channel states, saving as an S_output datastructure
-    Input: flag∈["3-3","3-4","4-4"], lmax, ϵ~[E], B~[BField]
-    Parameters: lhs, mid, rhs, rrhs, spacings between reorthogonalising,, μ~[M]
-    Output: S_output object containing the scattering matrix, flag, lmax, ϵ, B"""
-function S_matrix(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}},
+""" Produces elastic and ionisation cross sections from scattering matrix,
+    kOpen vector and lb n"""
+function calc_σ(S, kOpen::Vector{typeof(0e0u"bohr^-1")}, lb::Int)
+    @assert mod(length(kOpen), lb)==0 "mod(length(kOpen), lb)≠0"
+    nb=div(length(kOpen),lb) # number of blocks
+    @assert size(S)==(nb*lb,nb*lb) "Size of S ≠ (no. blocks × length of block)²"
+    kᵧ = kOpen[1:lb] # wavenumbers of the different channels
+    Tsq = abs2.(I-S) # transmission coefficients, for el cs
+    Ssq = abs2.(S) # square of S-matrix, for ion cs
+    # initialise cross sections
+    σ_el = zeros(lb, lb)u"bohr^2"
+    σ_ion = zeros(lb)u"bohr^2"
+    prefacs=(x->π/x^2).(kᵧ)
+    # fill in elastic
+    for i=1:lb, j=1:lb
+        σ_sum=0.0
+        for kx=0:(nb-1), ky=0:(nb-1)
+            σ_sum += Tsq[i+kx*lb, j+ky*lb] # sum over boxes, taking [i,j] coord of each box
+        end
+        σ_el[i,j]=prefacs[j]*σ_sum
+    end
+    # fill in inelastic
+    for i=1:lb
+        σ_sum=0.0
+        for k=0:(nb-1) # sum over same channel in diff. boxes
+            σ_sum += 1 - sum(Ssq[:, i+k*lb]) # sum down column ↔ all nonunitary outgoing
+        end
+        σ_ion[i]=prefacs[i]*σ_sum
+    end
+    return σ_el, σ_ion
+end
+
+""" Calculates elastic, ionisation cross sections, returning them and the
+    change of basis matrix needed to interpret the channels
+    Input: lookup (all different or identical αβ), ϵ~[E], B~[BField]
+    lhs, mid, rhs, rrhs --- spacings between reorthogonalising --- μ~[M]
+    Output: σ_el, σ_ion, Pb"""
+function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}},
     ϵ::Unitful.Energy, B::Unitful.BField,
     lhs::Unitful.Length, mid::Unitful.Length,
     rhs::Unitful.Length, rrhs::Unitful.Length,
@@ -109,22 +142,22 @@ function S_matrix(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     F = [Pinv zeros(N,N)u"bohr";
          zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
     F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
-    𝐊 = K_matrix(rrhs, F, kOpen, lOpen)
+    𝐊 = K_matrix(rrhs, F, kOpen, lOpen) # following Mies (1980)
     @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
-    𝐒 = (I+im*𝐊)*inv(I-im*𝐊)
-end
-
-#end # module
-
-""" Data structure for containing scattering matrices for a simulation,
- and the initial conditions of that simulation"""
-struct S_output
-    diff_S :: Matrix{Complex{Float64}}
-    iden_S :: Matrix{Complex{Float64}}
-    coltype :: String # "3-3" etc
-    lmax :: Int
-    ϵ :: Unitful.Energy
-    B :: Unitful.BField
+    𝐒 = (I+im*𝐊)*inv(I-im*𝐊) # Scattering matrix
+    # calculate cross sections
+    lb = let lookupOpen=lookup[isOpen] # lookupOpen is physically meaningless
+        findlast(x->x.l==lookupOpen[1].l && x.ml==lookupOpen[1].ml,lookupOpen) # length of a block = number of channels
+    end
+    σ_el, σ_ion = calc_σ(𝐒, kOpen, lb)
+    αβ=unique((x->(x.α,x.β)).(lookup)) # unique atomic configurations
+    nαβ=length(αβ) # number of atomic configurations
+    Pb = let # change of basis matrix for interpreting the cross sections
+        P_open_ch = P[:, isOpen] # change of basis matrix with only open channels
+        @assert mod(size(P,1),nαβ)==0 "number of rows in P not divisible by number of unique |αβ>"
+        P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
+    end
+    return σ_el, σ_ion, Pb
 end
 
 
@@ -141,50 +174,42 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
     iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
     diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
     # generate scattering matrix in each case
-    # skipping calculation if the lookup vectors are empty (lmax=0 can produce this scenario)
-    iden_S = length(iden_lookup)>0 ? S_matrix(iden_lookup, ϵ, B, lhs, mid, rhs, rrhs,
-    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing, μ) : Matrix{Complex{Float64}}(undef,0,0)
-    diff_S = length(diff_lookup)>0 ? S_matrix(diff_lookup, ϵ, B, lhs, mid, rhs, rrhs,
-    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing, μ) : Matrix{Complex{Float64}}(undef,0,0)
-    S_output(diff_S, iden_S, coltype, lmax, ϵ, B)
+    # skip if no symmetric states (3-4 case)
+    if length(iden_lookup)==0
+        iden_σ_el, iden_σ_ion, iden_P = zeros(0,0)u"bohr^2", zeros(0,0)u"bohr^2", zeros(0,0)
+        diff_σ_el, diff_σ_ion, diff_P = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+    else
+        @assert length(diff_lookup)>0 "length(diff_lookup)!>0" # sanity check
+        iden_σ_el, iden_σ_ion, iden_P = blackbox(iden_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        diff_σ_el, diff_σ_ion, diff_P = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+    end
+    iden_αβ = unique((x->(x.α,x.β)).(iden_lookup))
+    diff_αβ = unique((x->(x.α,x.β)).(diff_lookup))
+    σ_el = let
+            @assert size(iden_σ_el)[1]==size(iden_σ_el)[2] "iden_σ_el not square" # sanity check
+            @assert size(diff_σ_el)[1]==size(diff_σ_el)[2] "diff_σ_el not square" # sanity check
+            i = size(iden_σ_el)[1]
+            d = size(diff_σ_el)[1]
+            [iden_σ_el zeros(i,d)u"bohr^2" # patch together both elastic cs matrices
+            zeros(d,i)u"bohr^2" diff_σ_el ]
+    end
+    σ_ion = vcat(iden_σ_ion, diff_σ_ion) # glue together both ion cs vectors
+    P = let # patch together the change-of-basis matrix for interpreting
+        iden_m, iden_n = size(iden_P)
+        diff_m, diff_n = size(iden_P)
+        [iden_P zeros(iden_m,diff_n)
+         zeros(diff_m,iden_n) diff_P]
+    end
+    αβ=vcat(iden_αβ,diff_αβ) # atomic configurations for reference
+    σ_el, σ_ion, P, αβ, ϵ, B, lmax
 end
 
+# end # module
 
 #################################Testing########################################
-""" Produces elastic and ionisation cross sections from scattering matrix,
-    kOpen vector and lb n"""
-function calc_σ(S, kOpen::Vector{typeof(0e0u"bohr^-1")}, lb::Int)
-    @assert mod(length(kOpen), lb)==0 "mod(length(kOpen), lb)≠0"
-    nb=div(length(kOpen),lb) # number of blocks
-    @assert size(S)==(nb*lb,nb*lb) "Size of S ≠ (no. blocks × length of block)²"
-    kᵧ = kOpen[1:lb] # wavenumbers of the different channels
-    Tsq = abs2.(I-S) # transmission coefficients, for el cs
-    Ssq = abs2.(S) # square of S-matrix, for ion cs
-    # initialise cross sections
-    σ_el = zeros(lb, lb)u"bohr^2"
-    σ_ion = zeros(lb)u"bohr^2"
-    prefacs=(x->π/x^2).(kᵧ)
-    # fill in elastic
-    for i=1:lb, j=1:lb
-        σ_sum=0.0
-        for kx=0:(nb-1), ky=0:(nb-1)
-            σ_sum += Tsq[i+kx*lb, j+ky*lb] # sum over boxes, taking [i,j] coord of each box
-        end
-        σ_el[i,j]=prefacs[j]*σ_sum
-    end
-    # fill in inelastic
-    for i=1:lb
-        σ_sum=0.0
-        for k=0:(nb-1) # sum over same channel in diff. boxes
-            σ_sum += 1 - sum(Ssq[:, i+k*lb]) # sum down column ↔ all nonunitary outgoing
-        end
-        σ_ion[i]=prefacs[i]*σ_sum
-    end
-    return σ_el, σ_ion
-end
 
 
-coltype="4-4"; lmax=2; ϵ=1e-12u"hartree"; B=0u"T";
+coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.01u"T";
 lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
 lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
 μ=0.5*4.002602u"u";
@@ -266,3 +291,10 @@ lb = let lookupOpen=lookup[isOpen] # lookupOpen is physically meaningless
     findlast(x->x.l==lookupOpen[1].l && x.ml==lookupOpen[1].ml,lookupOpen) # length of a block = number of channels
 end
 σ_el, σ_ion = calc_σ(𝐒, kOpen, lb)
+αβ=unique((x->(x.α,x.β)).(lookup)) # unique atomic configurations
+nαβ=length(αβ) # number of atomic configurations
+Pb = let # change of basis matrix for interpreting the cross sections
+    P_open_ch = P[:, isOpen] # change of basis matrix with only open channels
+    @assert size(P_open_ch,1)==nαβ*(1+maximum((x->x.l).(lookup)))^2 "number of rows in P ≠ number of unique |αβ>*(lmax+1)^2"# sum(2l+1) to lmax = (lmax+1)^2
+    P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
+end
