@@ -102,3 +102,6 @@ end
 
 """⟨Γ'S'||𝐂²||ΓS⟩ from Beams et al. (2006) eqn (20)"""
 CTensor(l,l_)=sqrt((2*l+1)/(2*l_+1))*clebschgordan_lax(l,0,2,0,l_,0)
+
+# testing
+H_sd_coeffs(bra::test_ket, ket::test_ket) = 0

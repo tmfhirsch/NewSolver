@@ -6,6 +6,7 @@ module StateStructures
 using HalfIntegers
 
 export asym_αβlml_ket, scat_αβlml_ket, αβlml_eval, αβlml_lookup_generator, atom_nos
+export test_ket, test_lookup_generator
 # Hyperfine basis states
 
 # (Sⱼiⱼfₖmₖ), atomic quantum numbers
@@ -145,5 +146,22 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
     end # coltype 'if' statement
     return lookup
 end
+
+# Testing
+struct test_ket
+    x::Int # identifies
+    l::Int # angular momentum
+    test_ket(x) = x∈[1,2,3] ? new(x,0) : error("x=$x is an invalid entry for test_ket")
+end
+
+function test_lookup_generator()
+    lookup=Vector{test_ket}([])
+    for i=1:3
+        push!(lookup,test_ket(i))
+    end
+    lookup
+end
+
+αβlml_eval(op, bra::test_ket, ket::test_ket, p...)=op(bra,ket,p...)
 
 end # module

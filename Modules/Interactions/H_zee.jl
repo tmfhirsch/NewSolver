@@ -51,3 +51,5 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
     end # ket α
     result
 end
+
+H_zee(bra::test_ket, ket::test_ket, B::Unitful.BField)=0u"hartree"

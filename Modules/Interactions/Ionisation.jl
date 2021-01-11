@@ -57,3 +57,6 @@ end
 
 # radial factor (Cocks et al. 2019)
 Γ_GMS_radial(R::Unitful.Length) = -im/2*0.3*exp(-R/1.086u"bohr")*1u"hartree"
+
+# testing
+Γ_GMS_coeffs(bra::test_ket, ket::test_ket)=0

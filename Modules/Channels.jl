@@ -48,4 +48,19 @@ function P_Pinv(lookup::Union{Vector{scat_αβlml_ket},Vector{asym_αβlml_ket}}
     P, Pinv
 end
 
+# test
+function P_Pinv(lookup::Vector{test_ket},B::Unitful.BField)
+    n=length(lookup)
+    P = Matrix{Float64}(zeros(n,n)) # initialise
+    Pinv = Matrix{Float64}(zeros(n,n)) # initialise
+    H∞ = Matrix{Unitful.Energy}(zeros(n,n)u"hartree")
+    for i=1:n, j=1:n
+        bra, ket = lookup[i], lookup[j]
+        H∞[i,j] = H_hfs(bra,ket)
+    end
+    P=eigen(austrip.(H∞)).vectors
+    Pinv=inv(P)
+    P, Pinv
+end
+
 end # module

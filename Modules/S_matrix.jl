@@ -14,7 +14,7 @@ using Interactions, Channels, matchF, matchK, StateStructures, Solvers
 
 
 # generates isOpen, kOpen, lOpen vectors from a list of asymptotic energies
-function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.Mass, lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}})
+function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.Mass, lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket},Vector{test_ket}})
     ksq=(V->uconvert(u"bohr^-2",2*μ*(ϵ-V)/(1u"ħ^2"))).(D∞)
     isOpen=Vector{Bool}([]) # initialise isOpen
     kOpen=Vector{typeof(0e0u"bohr^-1")}([]) # initialise kOpen
@@ -133,12 +133,12 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     end
     @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
     # solve lhs → mid ← rhs
-    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, B, μ)
-    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, B, μ)
+    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, μ)
+    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
     # solve F out to rrhs before matching to bessel functions
-    F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)[1] # [1] bc only need final value
+    F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, μ)[1] # [1] bc only need final value
     F = [Pinv zeros(N,N)u"bohr";
          zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
     F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
@@ -205,17 +205,18 @@ end
 
 # end # module
 
-#################################Testing########################################
+#########################Testing with real stuff################################
 
-
-coltype="3-3"; lmax=0; ϵ=1e-7u"hartree"; B=0.01u"T";
-lhs=3e0u"bohr"; mid=5e0u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
-lhs2mid_spacing=1e0u"bohr"; rhs2mid_spacing=1e1u"bohr"; rhs2rrhs_spacing=1e2u"bohr";
+coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.0u"T";
+lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
+lhs2mid_spacing=2e1u"bohr"; rhs2mid_spacing=1e2u"bohr"; rhs2rrhs_spacing=5e3u"bohr";
 μ=0.5*4.002602u"u";
+
 
 iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
 diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
-lookup=diff_lookup # playing around w/ lookup vec of |α≠β⟩ states
+#lookup=test_lookup_generator() # playing around w/ lookup vec of |α≠β⟩ states
+lookup=iden_lookup
 
 N=length(lookup) # total number of computational states, incl. |lml>
 P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
@@ -273,18 +274,19 @@ BR = let BR = let
 end
 @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
 # solve lhs → mid ← rhs
-AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, B, μ)
-BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, B, μ)
+AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, μ)
+BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, μ)
 # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
 F = F_matrix(AL, AR, BL, BR)
 # solve F out to rrhs before matching to bessel functions
-F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, B, μ)[1] # [1] bc only need final value
-F = [Pinv zeros(N,N)u"bohr";
-     zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
-F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
-𝐊 = K_matrix(rrhs, F, kOpen, lOpen)
+Frrhs = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, μ)[1] # [1] bc only need final value
+Fch = [Pinv zeros(N,N)u"bohr";
+     zeros(N,N)u"bohr^-1" Pinv]*Frrhs # change F to channel basis
+FOpen = Fch[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
+𝐊 = K_matrix(rrhs, FOpen, kOpen, lOpen)
 @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
 𝐒 = (I+im*𝐊)*inv(I-im*𝐊)
+# Following only useful for testing with realistic kets
 # calculate cross sections
 lb = let lookupOpen=lookup[isOpen] # lookupOpen is physically meaningless
     findlast(x->x.l==lookupOpen[1].l && x.ml==lookupOpen[1].ml,lookupOpen) # length of a block = number of channels
@@ -294,6 +296,5 @@ end
 nαβ=length(αβ) # number of atomic configurations
 Pb = let # change of basis matrix for interpreting the cross sections
     P_open_ch = P[:, isOpen] # change of basis matrix with only open channels
-    @assert size(P_open_ch,1)==nαβ*(1+maximum((x->x.l).(lookup)))^2 "number of rows in P ≠ number of unique |αβ>*(lmax+1)^2"# sum(2l+1) to lmax = (lmax+1)^2
     P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
 end

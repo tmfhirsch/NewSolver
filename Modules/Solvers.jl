@@ -14,11 +14,12 @@ using StateStructures, Interactions
 mutable struct RenormCallback
     maxvalsqr::Float64
     transform::Vector{Float64}
+    debug_counter::Int
 end
 
 function CreateRenormCallback(maxval::Float64, n::Int)
     maxvalsqr=maxval^2
-    obj = RenormCallback(maxvalsqr, ones(n))
+    obj = RenormCallback(maxvalsqr, ones(n), 0)
     condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
     DiscreteCallback(condition, obj, save_positions=(true,false))
 end
@@ -32,7 +33,8 @@ function (obj::RenormCallback)(int)
     @assert size(maxval)==(1,length(obj.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
     obj.transform ./= vec(maxval) # can't directly broadcast a vector with a 1xN matrix
     @debug "Renormalised" int.t
-    #u_modified!(int,true)
+    obj.debug_counter+=1
+    u_modified!(int,true)
     nothing
 end
 
@@ -44,11 +46,11 @@ end
     lhs and rhs, the start/end points; B and μ, the external magnetic field
     and effective collisional mass; callback, for storing renormalisations
     Output: Solution to numerically integrating the TISE, from IC at lhs to rhs."""
-function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1}},
+function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
                 IC, ϵ::Unitful.Energy,
                 M_el, M_sd, M_zee, M_Γ,
                 lhs::Unitful.Length, rhs::Unitful.Length,
-                B::Unitful.BField, μ::Unitful.Mass,
+                μ::Unitful.Mass,
                 callback::DiscreteCallback)
     # Check length and units of IC
     n = length(lookup) # number of channels
@@ -106,11 +108,11 @@ end
 
 """Re-orthogonalising DE solver. Takes a list of R values and solves from first
 to last, re-orthogonalising at every interim value."""
-function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1}},
+function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
                     IC, ϵ::Unitful.Energy,
                     M_el, M_sd, M_zee, M_Γ,
                     locs,
-                    B::Unitful.BField, μ::Unitful.Mass;
+                    μ::Unitful.Mass;
                     maxval=1e5) # maxval defines when to renormalise
     # sanity checks on Rs
     @assert length(locs)>=2 "length(locs) < 2"
@@ -126,18 +128,31 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,B,μ,callback)
+        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,μ,callback)
         ψ=sol(finish) # solution evaluated at rhs
+        @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging nonfunctional renorm
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
-        push!(Rs,ψQR.R) # save R
+        # renorm R
+        R=ψQR.R
+        maxR=maximum(abs.(R), dims=1)
+        R ./= maxR # normalise R
+        callback.affect!.transform ./= vec(maxR) # save renorm in transform
+        push!(Rs,R) # save R
+        # debugging
+        let Qmax=maximum(sqrt.(abs2.(austrip.(Qs[k]))))
+            Rmax=maximum(sqrt.(abs2.(Rs[k])))
+            @info "k=$k, maxQ=$Qmax, maxR=$Rmax"
+        end
     end
     ψ=Qs[end] # at this point Q[end] is the Q of the final solution
     for R in reverse(Rs)
         ψ=ψ*R # reverse the orthogonalisation process
     end
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
+    @info "Integrating $(locs[1]) → $(locs[end]), renormalised $(callback.affect!.debug_counter) times"
+    @info callback.affect!.transform
     return ψ, IC
 end
 
-end # module
+end # module#

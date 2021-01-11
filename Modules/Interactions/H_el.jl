@@ -59,3 +59,6 @@ end
 function H_el_radial(cs::Tuple{Float64,Float64,Float64}, R::Unitful.Length)
     return cs[1]*Singlet(R) + cs[2]*Triplet(R) + cs[3]*Quintet(R)
 end
+
+# test
+H_el_coeffs(bra::test_ket, ket::test_ket) = (0,0,0)

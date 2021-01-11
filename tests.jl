@@ -5,10 +5,10 @@ using Unitful, UnitfulAtomic, LinearAlgebra
 using OrdinaryDiffEq
 
 ##################Testing why solutions are blowing up##########################
-coltype="3-3"; lmax=0; ϵ=1e-12u"hartree"; B=0.1u"T"; μ=0.5*4.002602u"u"
+coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.00u"T"; μ=0.5*4.002602u"u"
 lookup=vcat(αβlml_lookup_generator(coltype,"iden",lmax),αβlml_lookup_generator(coltype,"diff",lmax))
 n=length(lookup)
-locs=2e2u"bohr":1e1u"bohr":3e3u"bohr"
+locs=[2e2u"bohr",1e4u"bohr"]#
 IC=[diagm(ones(n))u"bohr" zeros(n,n)u"bohr"
     zeros(n,n) I]
 # taken verbatim from proper code###############################################
@@ -22,4 +22,4 @@ for i=1:n,j=1:n # fill in coefficient arrays
     M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
 end#############################################################################
 
-sol_Ψ, sol_IC =orth_solver(lookup,IC,ϵ,M_el,M_sd,M_zee,M_Γ,locs,B,μ)
+sol_Ψ, sol_IC =orth_solver(lookup,IC,ϵ,M_el,M_sd,M_zee,M_Γ,locs,μ)
