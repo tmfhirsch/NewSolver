@@ -207,16 +207,16 @@ end
 
 #########################Testing with real stuff################################
 
-coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.0u"T";
+coltype="3-3"; lmax=1; ϵ=1e-12u"hartree"; B=0u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
-lhs2mid_spacing=2e1u"bohr"; rhs2mid_spacing=1e2u"bohr"; rhs2rrhs_spacing=5e3u"bohr";
+lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=5e9u"bohr"; rhs2rrhs_spacing=1e9u"bohr";
 μ=0.5*4.002602u"u";
 
 
 iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
 diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
 #lookup=test_lookup_generator() # playing around w/ lookup vec of |α≠β⟩ states
-lookup=iden_lookup
+lookup=diff_lookup
 
 N=length(lookup) # total number of computational states, incl. |lml>
 P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
