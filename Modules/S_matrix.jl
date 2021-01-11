@@ -209,7 +209,7 @@ end
 
 coltype="3-3"; lmax=1; ϵ=1e-12u"hartree"; B=0u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
-lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=5e9u"bohr"; rhs2rrhs_spacing=1e9u"bohr";
+lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=5e1u"bohr"; rhs2rrhs_spacing=1e9u"bohr";
 μ=0.5*4.002602u"u";
 
 
@@ -244,17 +244,26 @@ lhs2mid_locs = let locs=collect(lhs:lhs2mid_spacing:mid)
     if locs[end]!=mid # in case the spacing doesn't match up, do an extra, shorter stint to finish at the right location
         push!(locs,mid)
     end
+    for i=1:(length(locs)-1) # check ascending order
+        @assert locs[i+1]>locs[i] "lhs2mid_locs[$i+1] ≦ lhs2mid_locs[$i]"
+    locs
     locs
 end
 rhs2mid_locs = let locs=collect(rhs:-rhs2mid_spacing:mid)
     if locs[end]!=mid # in case the spacing doesn't match up, do an extra, shorter stint to finish at the right location
         push!(locs,mid)
     end
+    for i=1:(length(locs)-1) # check descending order
+        @assert locs[i+1]<locs[i] "rhs2mid_locs[$i+1] ≧ rhs2mid_locs[$i]"
+    end
     locs
 end
 rhs2rrhs_locs = let locs=collect(rhs:rhs2rrhs_spacing:rrhs)
     if locs[end]!=rrhs # in case the spacing doesn't match up, do an extra, shorter stint to finish at the right location
         push!(locs,rrhs)
+    end
+    for i=1:(length(locs)-1) # check ascending order
+        @assert locs[i+1]>locs[i] "rhs2rrhs_locs[$i+1] ≧ rhs2rrhs_locs[$i]"
     end
     locs
 end
