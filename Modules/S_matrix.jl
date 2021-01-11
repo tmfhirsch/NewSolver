@@ -246,7 +246,7 @@ lhs2mid_locs = let locs=collect(lhs:lhs2mid_spacing:mid)
     end
     for i=1:(length(locs)-1) # check ascending order
         @assert locs[i+1]>locs[i] "lhs2mid_locs[$i+1] ≦ lhs2mid_locs[$i]"
-    locs
+    end
     locs
 end
 rhs2mid_locs = let locs=collect(rhs:-rhs2mid_spacing:mid)
