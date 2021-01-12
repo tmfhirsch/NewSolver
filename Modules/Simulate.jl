@@ -4,33 +4,13 @@ Module also contains the S_output datastructure, which contains scattering
 matrices and initial conditions all together
 Description last updated 21/12/2020 =#
 
-#module ScatMat
-
-#export S_output, S_matrix
+module Simulate
+export sim, sim_output
 
 using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers
 
-
-# generates isOpen, kOpen, lOpen vectors from a list of asymptotic energies
-function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.Mass, lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket},Vector{test_ket}})
-    ksq=(V->uconvert(u"bohr^-2",2*μ*(ϵ-V)/(1u"ħ^2"))).(D∞)
-    isOpen=Vector{Bool}([]) # initialise isOpen
-    kOpen=Vector{typeof(0e0u"bohr^-1")}([]) # initialise kOpen
-    lOpen=Vector{Int}([]) # initialise lOpen
-    for i in 1:length(D∞)
-        k²=ksq[i]
-        if k² > 0u"bohr^-2" # positive energy ⟺ open channel
-            push!(isOpen, true)
-            push!(kOpen, uconvert(u"bohr^-1",sqrt(k²)))
-            push!(lOpen, lookup[i].l) # comp and channel basis share same |l ml> block diag structure
-        else
-            push!(isOpen, false)
-        end
-    end
-    return isOpen, kOpen, lOpen
-end
 
 """ Produces elastic and ionisation cross sections from scattering matrix,
     kOpen vector and lb n"""
@@ -64,11 +44,26 @@ function calc_σ(S, kOpen::Vector{typeof(0e0u"bohr^-1")}, lb::Int)
     return σ_el, σ_ion
 end
 
-""" Calculates elastic, ionisation cross sections, returning them and the
-    change of basis matrix needed to interpret the channels
-    Input: lookup (all different or identical αβ), ϵ~[E], B~[BField]
-    lhs, mid, rhs, rrhs --- spacings between reorthogonalising --- μ~[M]
-    Output: σ_el, σ_ion, Pb"""
+""" Generates isOpen, kOpen, lOpen vectors from a list of asymptotic energies"""
+function isklOpen(D∞::Vector{Unitful.Energy}, ϵ::Unitful.Energy, μ::Unitful.Mass, lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket},Vector{test_ket}})
+    ksq=(V->uconvert(u"bohr^-2",2*μ*(ϵ-V)/(1u"ħ^2"))).(D∞)
+    isOpen=Vector{Bool}([]) # initialise isOpen
+    kOpen=Vector{typeof(0e0u"bohr^-1")}([]) # initialise kOpen
+    lOpen=Vector{Int}([]) # initialise lOpen
+    for i in 1:length(D∞)
+        k²=ksq[i]
+        if k² > 0u"bohr^-2" # positive energy ⟺ open channel
+            push!(isOpen, true)
+            push!(kOpen, uconvert(u"bohr^-1",sqrt(k²)))
+            push!(lOpen, lookup[i].l) # comp and channel basis share same |l ml> block diag structure
+        else
+            push!(isOpen, false)
+        end
+    end
+    return isOpen, kOpen, lOpen
+end
+
+""" Calculates σ for a single lookup vector (to be called by sim())"""
 function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}},
     ϵ::Unitful.Energy, B::Unitful.BField,
     lhs::Unitful.Length, mid::Unitful.Length,
@@ -88,6 +83,7 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     @assert length(D∞)==N "length(ksq) ≠ length(lookup)" # sanity check
     isOpen, kOpen, lOpen = isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
     Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
+    Nₒ==0 && return zeros(0,0)u"bohr^2", zeros(0)u"bohr^2", zeros(0,0), zeros(0)u"bohr^-1" # trivial case, no need to look at scattering
     # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
     M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,N,N)
     M_sd, M_Γ = zeros(N,N), zeros(N,N)
@@ -157,31 +153,44 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
         @assert mod(size(P,1),nαβ)==0 "number of rows in P not divisible by number of unique |αβ>"
         P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
     end
-    return σ_el, σ_ion, Pb
+    return σ_el, σ_ion, Pb, kOpen
+end
+
+"""Simulation output struct."""
+struct sim_output
+    σ_el::Matrix{typeof(0e0u"bohr^2")}
+    σ_ion::Vector{typeof(0e0u"bohr^2")}
+    P::Matrix{Float64}
+    αβ::Vector{Tuple{atom_nos,atom_nos}}
+    k::Vector{typeof(0e0u"bohr^-1")}
+    coltype::String
+    ϵ::Unitful.Energy
+    B::Unitful.BField
+    lmax::Int
 end
 
 """ Runs simulation to give scattering matrices for identical and different lookup vectors.
     Output: S_output containing S_matrices for iden_ and diff_ |αβ⟩, their
     associated CoB matrices and lookup vectors, plus initial conditions"""
-function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
-    lhs::Unitful.Length=3e0u"bohr", mid::Unitful.Length=5e0u"bohr",
-    rhs::Unitful.Length=2e2u"bohr", rrhs::Unitful.Length=1e4u"bohr",
-    lhs2mid_spacing::Unitful.Length=1e0u"bohr", rhs2mid_spacing::Unitful.Length=1e1u"bohr",
-    rhs2rrhs_spacing::Unitful.Length=1e2u"bohr",
-    μ::Unitful.Mass=0.5*4.002602u"u")
+function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
+    lhs::Unitful.Length, mid::Unitful.Length,
+    rhs::Unitful.Length, rrhs::Unitful.Length,
+    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length,
+    rhs2rrhs_spacing::Unitful.Length; μ::Unitful.Mass=0.5*4.002602u"u")
     # generate two different lookup vectors
     iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
     diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
     # generate scattering matrix in each case
     # skip if no symmetric states (3-4 case)
     if length(iden_lookup)==0
-        iden_σ_el, iden_σ_ion, iden_P = zeros(0,0)u"bohr^2", zeros(0,0)u"bohr^2", zeros(0,0)
-        diff_σ_el, diff_σ_ion, diff_P = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        iden_σ_el, iden_σ_ion, iden_P, iden_k = zeros(0,0)u"bohr^2", zeros(0)u"bohr^2", zeros(0,0), zeros(0)u"bohr^-1"
+        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
     else
         @assert length(diff_lookup)>0 "length(diff_lookup)!>0" # sanity check
-        iden_σ_el, iden_σ_ion, iden_P = blackbox(iden_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
-        diff_σ_el, diff_σ_ion, diff_P = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        iden_σ_el, iden_σ_ion, iden_P, iden_k = blackbox(iden_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
     end
+    @assert length(iden_k)+length(diff_k)>0 "No open channels found in iden_ or diff_ lookups" # sanity check
     iden_αβ = unique((x->(x.α,x.β)).(iden_lookup))
     diff_αβ = unique((x->(x.α,x.β)).(diff_lookup))
     σ_el = let
@@ -195,21 +204,24 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField;
     σ_ion = vcat(iden_σ_ion, diff_σ_ion) # glue together both ion cs vectors
     P = let # patch together the change-of-basis matrix for interpreting
         iden_m, iden_n = size(iden_P)
-        diff_m, diff_n = size(iden_P)
+        diff_m, diff_n = size(diff_P)
         [iden_P zeros(iden_m,diff_n)
          zeros(diff_m,iden_n) diff_P]
     end
+    k = vcat(iden_k, diff_k) # asymptotic wavenumbers of the channels
     αβ=vcat(iden_αβ,diff_αβ) # atomic configurations for reference
-    σ_el, σ_ion, P, αβ, ϵ, B, lmax
+    sim_output(σ_el, σ_ion, P, αβ, k, coltype, ϵ, B, lmax)
 end
 
-# end # module
+end # module
+
 
 #########################Testing with real stuff################################
+#=
 
-coltype="3-3"; lmax=1; ϵ=1e-12u"hartree"; B=0u"T";
-lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=2e2u"bohr"; rrhs=1e4u"bohr";
-lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=5e1u"bohr"; rhs2rrhs_spacing=1e9u"bohr";
+coltype="4-4"; lmax=0; ϵ=-7.6e-7u"hartree"; B=0.09u"T";
+lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=2e2u"bohr"; rrhs=1e3u"bohr";
+lhs2mid_spacing=1e1u"bohr"; rhs2mid_spacing=1e9u"bohr"; rhs2rrhs_spacing=2e2u"bohr";
 μ=0.5*4.002602u"u";
 
 
@@ -307,3 +319,5 @@ Pb = let # change of basis matrix for interpreting the cross sections
     P_open_ch = P[:, isOpen] # change of basis matrix with only open channels
     P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
 end
+
+=#

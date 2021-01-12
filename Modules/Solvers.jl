@@ -130,7 +130,7 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
         # solve, last stored Q being the IC
         sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,μ,callback)
         ψ=sol(finish) # solution evaluated at rhs
-        @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging nonfunctional renorm
+        @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
         # renorm R
@@ -139,19 +139,19 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
         R ./= maxR # normalise R
         callback.affect!.transform ./= vec(maxR) # save renorm in transform
         push!(Rs,R) # save R
-        # debugging
+        #=# debugging
         let Qmax=maximum(sqrt.(abs2.(austrip.(Qs[k]))))
             Rmax=maximum(sqrt.(abs2.(Rs[k])))
             @info "k=$k, maxQ=$Qmax, maxR=$Rmax"
-        end
+        end=#
     end
     ψ=Qs[end] # at this point Q[end] is the Q of the final solution
     for R in reverse(Rs)
         ψ=ψ*R # reverse the orthogonalisation process
     end
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
-    @info "Integrating $(locs[1]) → $(locs[end]), renormalised $(callback.affect!.debug_counter) times"
-    @info callback.affect!.transform
+    #@info "Integrating $(locs[1]) → $(locs[end]), renormalised $(callback.affect!.debug_counter) times"
+    #@info callback.affect!.transform
     return ψ, IC
 end
 
