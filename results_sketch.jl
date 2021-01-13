@@ -1,47 +1,56 @@
-savedir=raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Summer Internship\Results\12-1-test2"
+using Revise
+using Unitful, UnitfulAtomic
+savedir=raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Summer Internship\Results\13-1-test2"
 
 
-"""
-Plot diagonal elements of pairwise σ (i.e. elastic cross sections) vs wavenumber
-Inputs: kmin~[L]⁻¹, kmax~[L]⁻¹ for plot x axis, B~[BField],lmax;
-    Emin~[E]=0Eₕ, Emax~[E]=1Eₕ for finding appropriate data
-Output: plot of elastic cross sections vs k"""
-function diffk_gam_plot(kmin::typeof(0e0u"bohr^-1"),kmax::typeof(0e0u"bohr^-1"),
-    B::Unitful.BField,lmax::Int)
-    # load all data with correct B
-    datas=load_data("gam",-(Inf)u"hartree",(Inf)u"hartree",B,B,lmax)
-    @assert length(datas)>0 "Didn't find any suitable data"
-    sort!(datas, by=(x->x.ϵ)) # sort by increasing energy
-    unq = unqkets(reverse(datas)) # reverse to find uniques starting with high energy data
-    pltdata=[] # array to store ([k],[σ}) pairs for the different γ
-    pltlabel=label_from_lookup(unq)
-    for γ in unq
-        datatuple::typeof(([0.0u"bohr^-1"],[0.0u"bohr^2"]))=([],[])
-        for d in datas # already sorted datas by energy
-            if γ in d.γ_lookup
-                dγ_index=findall(x->x==γ,d.γ_lookup)[1] # order of γ in σ array
-                k=k∞(γ,d.ϵ,B) # the asymptotic wavenumber for this particular data
-                imag(k)==0.0u"bohr^-1" || continue # don't store if the wavenumber is complex⟺channel closed
-                kmin <= real(k) <= kmax || continue # don't store if the wavenumber is out of bounds
-                push!(datatuple[1],k) # store wavenumber
-                push!(datatuple[2],d.σ[dγ_index,dγ_index]) # store cross section
-            end
-        end
-        push!(pltdata,datatuple)
-    end
-    println("Minimum values are:")
-    println("S, mS = ",(x->"$(x.S), $(x.mS)").(unq))
-    println(austrip.([pltdata[i][2][1] for i=1:length(pltdata)]))
-    # plot first γ_ket
-    plot(austrip.(pltdata[1][1]),austrip.(pltdata[1][2]),xlabel="Wavenumber (a₀⁻¹)", xscale=:log10,
-    ylabel="σ (a₀²)",yscale=:log10, minorticks=true, label=pltlabel[1], legend=:outertopright,
-    title="B=$B, lmax=$lmax",
-    left_margin=5mm,bottom_margin=5mm, top_margin=5mm,
-    linewidth=2, grid=false)
-    if length(pltdata)>1 # plot rest of the γ_kets
-        for i in 2:length(pltdata)
-            plot!(austrip.(pltdata[i][1]),austrip.(pltdata[i][2]),label=pltlabel[i])
+const G = 1e-4u"T"
+
+union!(LOAD_PATH,[raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules"])
+using GenerateData
+
+# sketch follow ↓
+no_sims, k_fixed, B_fixed = 11,1e-4u"bohr^-1", 0u"T"
+coltype, lmax, Bmin, Bmax, kmin, kmax = "4-4", 0, 0u"T", 0.1u"T",1e-4u"bohr^-1",1e-2u"bohr^-1"
+#gen_diffB_constk_data(savedir,Bmin,Bmax,no_sims,k_fixed,coltype,lmax)
+gen_diffk_constB_data(savedir,kmin,kmax,no_sims,B_fixed,coltype,lmax)
+
+using Simulate, StateStructures, HalfIntegers, Plots
+""" Scatter plot of elastic cross sections, at different B and constant k"""
+function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax::Unitful.BField,
+    k::Union{typeof(0u"bohr^-1"),typeof(0e0u"bohr^-1")}, coltype::String, lmax::Integer)
+    @assert el_or_ion ∈ ["el","ion"] "el_or_ion flag ≠ el, ion" # sanity check
+    data=load_data(dir, coltype, -(Inf)u"hartree", (Inf)u"hartree", Bmin, Bmax, lmax)
+    length(data)==0 && @warn "No data found matching arguments. Aborting plot." && return nothing
+    σs = zeros(0)u"bohr^2"; Bs = zeros(0)u"T" # initialise
+    for d in data
+        correctks = findall(x->x==k, d.k)
+        correctks==[] && continue # skip if no channels have correct wavenumber
+        for i in correctks # channel i has correct wavenumber
+            el_or_ion=="el" ? push!(σs, d.σ_el[i,i]) : push!(σs, d.σ_ion[i])
+            push!(Bs, d.B)
         end
     end
-    hline!([4*pi*austrip((7.54u"nm")^2)],label="S=2 4πa²")
+    scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σₑₗ (a₀²)",
+    yscale=:log10, legend=false)
 end
+
+function σ_vs_k_plot(el_or_ion::String,dir::String, kmin::Union{typeof(0u"bohr^-1"),typeof(0e0u"bohr^-1")},
+    kmax::Union{typeof(0u"bohr^-1"),typeof(0e0u"bohr^-1")}, B::Unitful.BField,
+    coltype::String, lmax::Integer)
+    @assert el_or_ion ∈ ["el","ion"] "el_or_ion flag ≠ el, ion" # sanity check
+    data=load_data(dir, coltype, -(Inf)u"hartree", (Inf)u"hartree", B, B, lmax)
+    length(data)==0 && @warn "No data found matching arguments. Aborting plot." && return nothing
+    σs = zeros(0)u"bohr^2"; ks = zeros(0)u"bohr^-1" # initialise
+    for d in data
+        correctks = findall(x->kmin<=x<=kmax, d.k) # in desired k bounds
+        correctks==[] && continue # skip if no channels have desirable wavenumber
+        for i in correctks # channel i has desirable wavenumber
+            el_or_ion=="el" ? push!(σs, d.σ_el[i,i]) : push!(σs, d.σ_ion[i])
+            push!(ks, d.k[i])
+        end
+    end
+    scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σₑₗ (a₀²)",
+    yscale=:log10,legend=false)
+end
+
+σ_vs_B_plot("el",savedir, Bmin, Bmax, k_fixed, coltype, lmax)
