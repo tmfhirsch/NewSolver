@@ -42,14 +42,14 @@ function gen_diffE_data(savedir::String,Emin_exp,Emax_exp,n::Integer,coltype::St
     existingfiles=readdir(savedir)
     ϵ_list=exp10.(LinRange(Emin_exp,Emax_exp,n))u"hartree" # energies
     println("lmax=$lmax, B=$B. Generating S_output for ϵ/Eh= ")
-    for ϵ in ϵ_list
+    Threads.@threads for ϵ in ϵ_list
         check_str=create_params_str(coltype,ϵ,B,lmax)
         if any(f->occursin(check_str,f), existingfiles)
             println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
             continue
         end
         # datum was not already calculated, proceeding to simulate.
-        println("$(austrip(ϵ)), ")
+        println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
         output=sim(coltype,lmax,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing)
         save_output(savedir, output)
     end
@@ -77,19 +77,19 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
             D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
             ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞)
             @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            for ϵ in ϵs # iterating over different channels
+            Threads.@threads for ϵ in ϵs # iterating over different channels
                 check_str=create_params_str(coltype,ϵ,B,lmax)
                 if any(f->occursin(check_str,f), existingfiles)
                     println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
                     continue
                 end
-                println("Running sim for ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G")
+				println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
                 try # try/catch in case of bug with this iteration.
                     output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
                     lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
                     save_output(savedir, output) # save
                 catch
-                    @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
+                    @warn "Error occured running sim. Skipped to next simulation."
                 end
             end
         end # B
@@ -106,7 +106,8 @@ function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
     iden_N=length(iden_lookup)
     diff_lookup=unique(αβlml_lookup_generator(coltype,"diff",lmax))
     diff_N=length(diff_lookup)
-    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channels
+    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channelschannels
+		N==0 && continue # skip empty group of channels
         H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
         for i=1:N, j=1:N
             bra, ket = lookup[i], lookup[j]
@@ -116,13 +117,13 @@ function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
         for k in ks # iterate over desired wavenumbers
             ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞) # energy req. for this wavenumber
             @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            for ϵ in ϵs # iterating over different channels
+            Threads.@threads for ϵ in ϵs # iterating over different channels
                 check_str=create_params_str(coltype,ϵ,B,lmax)
                 if any(f->occursin(check_str,f), existingfiles)
                     println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
                     continue
                 end
-                println("Running sim for ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G")
+				println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
                 try # try/catch in case of bug with this iteration.
                     output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
                     lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
