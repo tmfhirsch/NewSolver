@@ -68,7 +68,10 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
     diff_lookup=unique(αβlml_lookup_generator(coltype,"diff",lmax))
     diff_N=length(diff_lookup)
     for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channels
-        for B in Bs # iterate over different B fields
+		println("Iterating over iden_ or diff_ channels")
+		N==0 && continue # skip empty group of channels
+        Threads.@threads for B in Bs # iterate over different B fields
+			println("Calculating B=$B on thread $(Threads.threadid())")
             H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
             for i=1:N, j=1:N
                 bra, ket = lookup[i], lookup[j]
@@ -77,7 +80,7 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
             D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
             ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞)
             @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            Threads.@threads for ϵ in ϵs # iterating over different channels
+            for ϵ in ϵs # iterating over different channels
                 check_str=create_params_str(coltype,ϵ,B,lmax)
                 if any(f->occursin(check_str,f), existingfiles)
                     println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
@@ -88,8 +91,9 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
                     output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
                     lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
                     save_output(savedir, output) # save
-                catch
+                catch e
                     @warn "Error occured running sim. Skipped to next simulation."
+					println(e.msg)
                 end
             end
         end # B
@@ -98,7 +102,7 @@ end # function
 
 """ Constant B, different k data generation (logarithmically spaced wavenumbers)
     Inputs: savedir, kmin (exponent), kmax (exponent), n, B, coltype, lmax"""
-function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
+function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::Integer,
     B::Unitful.BField, coltype::String, lmax::Integer)
     existingfiles=readdir(savedir)
     ks=exp10.(LinRange(kmin,kmax,n))u"bohr^-1" # different wavenumbers to iterate over
@@ -106,7 +110,8 @@ function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
     iden_N=length(iden_lookup)
     diff_lookup=unique(αβlml_lookup_generator(coltype,"diff",lmax))
     diff_N=length(diff_lookup)
-    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channelschannels
+    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channels
+		println("Iterating over iden_ or diff_ channels")
 		N==0 && continue # skip empty group of channels
         H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
         for i=1:N, j=1:N
@@ -114,10 +119,11 @@ function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
             H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
         end
         D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
-        for k in ks # iterate over desired wavenumbers
+        Threads.@threads for k in ks # iterate over desired wavenumbers
+			println("Calculating k=$k on thread $(Threads.threadid())")
             ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞) # energy req. for this wavenumber
             @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            Threads.@threads for ϵ in ϵs # iterating over different channels
+            for ϵ in ϵs # iterating over different channels
                 check_str=create_params_str(coltype,ϵ,B,lmax)
                 if any(f->occursin(check_str,f), existingfiles)
                     println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
@@ -128,8 +134,9 @@ function gen_diffk_constB_data(savedir::String, kmin::Integer, kmax::Integer,
                     output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
                     lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
                     save_output(savedir, output) # save
-                catch
+                catch e
                     @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
+					println(e.msg)
                 end
             end
         end # k

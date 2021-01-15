@@ -153,7 +153,7 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
         @assert mod(size(P,1),nαβ)==0 "number of rows in P not divisible by number of unique |αβ>"
         P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
     end
-    return σ_el, σ_ion, Pb, kOpen
+    return σ_el, σ_ion, Pb, kOpen[1:lb]
 end
 
 """Simulation output struct."""
@@ -210,6 +210,7 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
     end
     k = vcat(iden_k, diff_k) # asymptotic wavenumbers of the channels
     αβ=vcat(iden_αβ,diff_αβ) # atomic configurations for reference
+    # calculate wavenumbers associated with the channels
     sim_output(σ_el, σ_ion, P, αβ, k, coltype, ϵ, B, lmax)
 end
 
