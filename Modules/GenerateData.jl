@@ -9,9 +9,9 @@ push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHY
 using Simulate, StateStructures, Interactions
 
 """ Parameters """
-const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=2e2u"bohr"; const rrhs=1e3u"bohr"
-const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=1e9u"bohr" # no mid←rhs orthog
-const rhs2rrhs_spacing=2e2u"bohr"; const μ=0.5*4.002602u"u"
+const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=1e3u"bohr"
+const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=2e9u"bohr" # no mid←rhs orthog
+const μ=0.5*4.002602u"u"
 
 const G = 1e-4u"T" # Gauss unit of magnetic flux density
 
@@ -50,7 +50,7 @@ function gen_diffE_data(savedir::String,Emin_exp,Emax_exp,n::Integer,coltype::St
         end
         # datum was not already calculated, proceeding to simulate.
         println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
-        output=sim(coltype,lmax,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing)
+        output=sim(coltype,lmax,ϵ,B,lhs,mid,rhs,lhs2mid_spacing,rhs2mid_spacing)
         save_output(savedir, output)
     end
 end
@@ -88,12 +88,12 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
             end
 			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
             try # try/catch in case of bug with this simulation
-                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
-                lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
+                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
+                lhs2mid_spacing, rhs2mid_spacing)
                 save_output(savedir, output) # save
             catch e
                 @warn "Error occured running sim. Skipped to next simulation."
-				println(e.msg)
+				@show e
             end # try/catch
         end # B
     end # (lookup, N)
@@ -130,12 +130,12 @@ function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::I
             end
 			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
             try # try/catch in case of bug with this iteration.
-                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
-                lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
+                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
+                lhs2mid_spacing, rhs2mid_spacing)
                 save_output(savedir, output) # save
             catch e
                 @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
-				println(e.msg)
+				@show e
             end # try/catch
         end # k
     end # (lookup, N)

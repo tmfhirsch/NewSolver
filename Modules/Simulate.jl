@@ -67,9 +67,8 @@ end
 function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket}},
     ϵ::Unitful.Energy, B::Unitful.BField,
     lhs::Unitful.Length, mid::Unitful.Length,
-    rhs::Unitful.Length, rrhs::Unitful.Length,
+    rhs::Unitful.Length,
     lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length,
-    rhs2rrhs_spacing::Unitful.Length,
     μ::Unitful.Mass)
     ################
     N=length(lookup) # total number of computational states, incl. |lml>
@@ -107,12 +106,6 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
         end
         locs
     end
-    rhs2rrhs_locs = let locs=collect(rhs:rhs2rrhs_spacing:rrhs)
-        if locs[end]!=rrhs # in case the spacing doesn't match up, do an extra, shorter stint to finish at the right location
-            push!(locs,rrhs)
-        end
-        locs
-    end
     # construct lhs and rhs initial conditions
     AL = let AL=[fill(0e0u"bohr",N,N); I]  # all wavefncs vanish, derivs do not
         [P    zeros(N,N)u"bohr";
@@ -133,12 +126,10 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
-    # solve F out to rrhs before matching to bessel functions
-    F = orth_solver(lookup, F, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2rrhs_locs, μ)[1] # [1] bc only need final value
     F = [Pinv zeros(N,N)u"bohr";
          zeros(N,N)u"bohr^-1" Pinv]*F # change F to channel basis
     F = F[[isOpen;isOpen], :] # delete rows of F corresponding to closed channels
-    𝐊 = K_matrix(rrhs, F, kOpen, lOpen) # following Mies (1980)
+    𝐊 = K_matrix(rhs, F, kOpen, lOpen) # following Mies (1980)
     @assert size(𝐊)==(Nₒ,Nₒ) "𝐊 is not Nₒ×Nₒ"  # want sq matrix of Nₒ channels
     𝐒 = (I+im*𝐊)*inv(I-im*𝐊) # Scattering matrix
     # calculate cross sections
@@ -174,9 +165,9 @@ end
     associated CoB matrices and lookup vectors, plus initial conditions"""
 function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
     lhs::Unitful.Length, mid::Unitful.Length,
-    rhs::Unitful.Length, rrhs::Unitful.Length,
-    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length,
-    rhs2rrhs_spacing::Unitful.Length; μ::Unitful.Mass=0.5*4.002602u"u")
+    rhs::Unitful.Length,
+    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length;
+    μ::Unitful.Mass=0.5*4.002602u"u")
     # generate two different lookup vectors
     iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
     diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
@@ -184,11 +175,11 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
     # skip if no symmetric states (3-4 case)
     if length(iden_lookup)==0
         iden_σ_el, iden_σ_ion, iden_P, iden_k = zeros(0,0)u"bohr^2", zeros(0)u"bohr^2", zeros(0,0), zeros(0)u"bohr^-1"
-        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,lhs2mid_spacing,rhs2mid_spacing,μ)
     else
         @assert length(diff_lookup)>0 "length(diff_lookup)!>0" # sanity check
-        iden_σ_el, iden_σ_ion, iden_P, iden_k = blackbox(iden_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
-        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,rrhs,lhs2mid_spacing,rhs2mid_spacing,rhs2rrhs_spacing,μ)
+        iden_σ_el, iden_σ_ion, iden_P, iden_k = blackbox(iden_lookup,ϵ,B,lhs,mid,rhs,lhs2mid_spacing,rhs2mid_spacing,μ)
+        diff_σ_el, diff_σ_ion, diff_P, diff_k = blackbox(diff_lookup,ϵ,B,lhs,mid,rhs,lhs2mid_spacing,rhs2mid_spacing,μ)
     end
     @assert length(iden_k)+length(diff_k)>0 "No open channels found in iden_ or diff_ lookups" # sanity check
     iden_αβ = unique((x->(x.α,x.β)).(iden_lookup))
