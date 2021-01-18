@@ -78,24 +78,23 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
                 H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
             end
             D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
-            ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞)
-            @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            for ϵ in ϵs # iterating over different channels
-                check_str=create_params_str(coltype,ϵ,B,lmax)
-                if any(f->occursin(check_str,f), existingfiles)
-                    println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
-                    continue
-                end
-				println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
-                try # try/catch in case of bug with this iteration.
-                    output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
-                    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
-                    save_output(savedir, output) # save
-                catch e
-                    @warn "Error occured running sim. Skipped to next simulation."
-					println(e.msg)
-                end
+			minV∞=minimum(D∞) # lowest energy chanel is physically relevant
+			ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
+            @assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
+            check_str=create_params_str(coltype,ϵ,B,lmax)
+            if any(f->occursin(check_str,f), existingfiles) # check if data already exists
+                println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
+                continue
             end
+			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+            try # try/catch in case of bug with this simulation
+                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
+                lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
+                save_output(savedir, output) # save
+            catch e
+                @warn "Error occured running sim. Skipped to next simulation."
+				println(e.msg)
+            end # try/catch
         end # B
     end # (lookup, N)
 end # function
@@ -119,26 +118,25 @@ function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::I
             H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
         end
         D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
+		minV∞=minimum(D∞) # lowest energy chanel is physically relevant
         Threads.@threads for k in ks # iterate over desired wavenumbers
 			println("Calculating k=$k on thread $(Threads.threadid())")
-            ϵs = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ))).(D∞) # energy req. for this wavenumber
-            @assert all(x->dimension(x)==dimension(0u"hartree"),ϵs) "ϵs not a list of energies" # sanity check
-            for ϵ in ϵs # iterating over different channels
-                check_str=create_params_str(coltype,ϵ,B,lmax)
-                if any(f->occursin(check_str,f), existingfiles)
-                    println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
-                    continue
-                end
-				println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
-                try # try/catch in case of bug with this iteration.
-                    output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
-                    lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
-                    save_output(savedir, output) # save
-                catch e
-                    @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
-					println(e.msg)
-                end
+			ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
+			@assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
+            check_str=create_params_str(coltype,ϵ,B,lmax)
+            if any(f->occursin(check_str,f), existingfiles) # check if data is already calculated
+                println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
+                continue
             end
+			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+            try # try/catch in case of bug with this iteration.
+                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs, rrhs,
+                lhs2mid_spacing, rhs2mid_spacing, rhs2rrhs_spacing)
+                save_output(savedir, output) # save
+            catch e
+                @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
+				println(e.msg)
+            end # try/catch
         end # k
     end # (lookup, N)
 end # function
