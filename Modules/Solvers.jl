@@ -21,7 +21,7 @@ function CreateRenormCallback(maxval::Float64, n::Int)
     maxvalsqr=maxval^2
     obj = RenormCallback(maxvalsqr, ones(n), 0)
     condition = (u,t,int) -> any(abs2.(u) .> maxvalsqr)
-    DiscreteCallback(condition, obj, save_positions=(true,false))
+    DiscreteCallback(condition, obj, save_positions=(false,false))
 end
 
 function (obj::RenormCallback)(int)
