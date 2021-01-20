@@ -76,10 +76,14 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
     ϵ⁰, μ⁰ = austrip(ϵ), austrip(μ)
     ħ⁰ = austrip(1.0u"ħ")
     lhs⁰, rhs⁰ = austrip(lhs), austrip(rhs)
+    IC⁰ = austrip.(complex.(IC))
     # TISE differential equation
+    D_times_u = similar(IC⁰) # preallocate to reduce allocations
+    V = zeros(ComplexF64,n,n)u"hartree" # preallocate
+    V⁰= zeros(ComplexF64,n,n) # preallocate
     function TISE(u,p,x)
         # Construct V(R) matrix
-        V = zeros(ComplexF64,n,n)u"hartree" # initialise
+        #V = zeros(ComplexF64,n,n)u"hartree" # initialise
         for i=1:n, j=1:n
             V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
             V[i,j]+= H_el_radial(M_el[i,j], x*1u"bohr") # electronic
@@ -92,10 +96,9 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
         M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matix
         D = ([0*I I
               M 0*I])
-        D*u # ⃗u' = D . ⃗u
+        mul!(D_times_u, D, u)
+        #D*u # ⃗u' = D . ⃗u
     end
-    # strip units from IC
-    IC⁰ = austrip.(complex.(IC))
     # solve
     prob=ODEProblem(TISE,IC⁰,(lhs⁰,rhs⁰))
     sol_unitless=solve(prob,Tsit5(),reltol=1e-10,save_start=true,save_end=true,save_everystep=false,dense=false,
@@ -123,36 +126,40 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     # initialise callback
     callback=CreateRenormCallback(maxval,ncols)
     # initialise Q, R arrays
-    Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
+    Q, Rcum = IC, Matrix(I,ncols,ncols) # Qs and Rs we will use
+    # old code, when I stored Qs and Rs; Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making Q have units
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Qs[k],ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,μ,callback)
+        sol=solver(lookup,Q,ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,μ,callback)
         ψ=sol(finish) # solution evaluated at rhs
         @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging
         ψQR=qr(austrip.(ψ)) # units stripped before QR
-        push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
-        # renorm R
+        Q = Matrix(ψQR.Q).*units # latest Q matrix
+        # old code, when I stored Qs and Rs; push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
+        # renorm QR.R
         R=ψQR.R
         maxR=maximum(abs.(R), dims=1)
         R ./= maxR # normalise R
         callback.affect!.transform ./= vec(maxR) # save renorm in transform
-        push!(Rs,R) # save R
+        Rcum = R*Rcum # multiply in the R matrices, instead of storing them all
+        # old code, when I stored Qs and Rs; push!(Rs,R) # save R
         #=# debugging
         let Qmax=maximum(sqrt.(abs2.(austrip.(Qs[k]))))
             Rmax=maximum(sqrt.(abs2.(Rs[k])))
             @info "k=$k, maxQ=$Qmax, maxR=$Rmax"
         end=#
     end
-    ψ=Qs[end] # at this point Q[end] is the Q of the final solution
-    for R in reverse(Rs)
-        ψ=ψ*R # reverse the orthogonalisation process
-    end
+    ψ = Q*Rcum
+    # old code, when I stored Qs and Rs; ψ=Qs[end] # at this point Q[end] is the Q of the final solution
+    # old code, when I stored Qs and Rs; for R in reverse(Rs)
+    # old code, when I stored Qs and Rs;     ψ=ψ*R # reverse the orthogonalisation process
+    # old code, when I stored Qs and Rs; end
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
     #@info "Integrating $(locs[1]) → $(locs[end]), renormalised $(callback.affect!.debug_counter) times"
     #@info callback.affect!.transform
     return ψ, IC
 end
 
-end # module#
+end # module

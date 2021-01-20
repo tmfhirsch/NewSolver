@@ -1,6 +1,6 @@
 using Revise
 using Unitful, UnitfulAtomic
-savedir=raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Summer Internship\Results\15-1-test"
+savedir=raw"D:\2021-SummerInternship-Results\20-1-optim"
 
 const G = 1e-4u"T"
 
@@ -25,14 +25,14 @@ function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax:
     end
     σs = zeros(0)u"bohr^2"; Bs = zeros(0)u"T" # initialise
     for d in data
-        correctks = findall(x->x==k, d.k)
+        correctks = findall(x->x≈k, d.k)
         correctks==[] && continue # skip if no channels have correct wavenumber
         for i in correctks # channel i has correct wavenumber
             el_or_ion=="el" ? push!(σs, d.σ_el[i,i]) : push!(σs, d.σ_ion[i])
             push!(Bs, d.B)
         end
     end
-    scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σₑₗ (a₀²)",
+    scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σ (a₀²)",
     yscale=:log10, legend=false)
 end
 
