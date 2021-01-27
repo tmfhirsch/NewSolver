@@ -56,7 +56,7 @@ function H_sd_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
                                   clebschgordan(bra.β.S,bra_mS_β, bra.β.i,bra_mi_β, bra.β.f,bra.β.m)*
                                   clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)
                             result += coeff*H_sd_SmS_coeffs(bra.α.S,bra.β.S,bra_S,bra_mS,bra.l,bra.ml,
-                                                     ket.α.S,ket.β.S,ket_S,ket_mS,ket.l,ket.ml)
+                                                            ket.α.S,ket.β.S,ket_S,ket_mS,ket.l,ket.ml)
                         end # bra S, mS
                     end # ket S, mS
                 end # bra β mS, mi

@@ -44,7 +44,7 @@ function H_el_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
                             elseif ket_S == 1
                                 C³ += coeff # triplet
                             else
-                                C⁵ += coeff # quintetS
+                                C⁵ += coeff # quintet
                             end # if
                         end # bra S,mS
                     end # bra mS_β, mi_β
@@ -52,13 +52,14 @@ function H_el_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
             end # ket S,mS
         end # ket mS_β, mi_β
     end # ket mS_α, mi_α
-    return (C¹,C³,C⁵)
+    return [C¹,C³,C⁵]
 end
 
+#= # superceded by pre-calculation of radial factors
 """ Radial function: (c₁,c₃,c₅) -> c₁*¹V(R)+c₃*⁵V(R)+c₃*⁵V(R)"""
 function H_el_radial(cs::Tuple{Float64,Float64,Float64}, R::Unitful.Length)
     return cs[1]*Singlet(R) + cs[2]*Triplet(R) + cs[3]*Quintet(R)
-end
+end =#
 
 # test
 H_el_coeffs(bra::test_ket, ket::test_ket) = (0,0,0)

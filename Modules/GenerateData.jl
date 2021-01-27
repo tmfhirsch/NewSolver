@@ -9,7 +9,7 @@ push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHY
 using Simulate, StateStructures, Interactions
 
 """ Parameters """
-const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=1e3u"bohr"
+const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=2e2u"bohr"
 const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=2e9u"bohr" # no mid←rhs orthog
 const μ=0.5*4.002602u"u"
 
@@ -63,40 +63,54 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
     println("Desired k=$k, iterating over $n B-fields from $Bmin to $Bmax.")
     existingfiles=readdir(savedir)
     Bs=LinRange(Bmin,Bmax,n) # different magnetic fields to iterate over
-    iden_lookup=unique(αβlml_lookup_generator(coltype,"iden",lmax))
-    iden_N=length(iden_lookup)
-    diff_lookup=unique(αβlml_lookup_generator(coltype,"diff",lmax))
-    diff_N=length(diff_lookup)
-    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channels
-		println("Iterating over iden_ or diff_ channels")
-		N==0 && continue # skip empty group of channels
-        Threads.@threads for B in Bs # iterate over different B fields
-			println("Calculating B=$B on thread $(Threads.threadid())")
-            H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
-            for i=1:N, j=1:N
-                bra, ket = lookup[i], lookup[j]
-                H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
-            end
-            D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
-			minV∞=minimum(D∞) # lowest energy chanel is physically relevant
-			ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
-            @assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
-            check_str=create_params_str(coltype,ϵ,B,lmax)
-            if any(f->occursin(check_str,f), existingfiles) # check if data already exists
-                println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
-                continue
-            end
-			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
-            try # try/catch in case of bug with this simulation
-                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
-                lhs2mid_spacing, rhs2mid_spacing)
-                save_output(savedir, output) # save
-            catch e
-                @warn "Error occured running sim. Skipped to next simulation."
-				@show e
-            end # try/catch
-        end # B
-    end # (lookup, N)
+	unq_iden_lookup = let iden_lookup = αβlml_lookup_generator(coltype,"iden",lmax)
+		@assert all(x->typeof(x)==scat_αβlml_ket,iden_lookup) || all(x->typeof(x)==asym_αβlml_ket,iden_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
+		if length(iden_lookup)==0
+			iden_lookup # return empty vector (3-4 case)
+		elseif typeof(iden_lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		else # asym_ket_case
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		end
+	end
+	iden_N=length(unq_iden_lookup)
+	unq_diff_lookup = let diff_lookup = αβlml_lookup_generator(coltype,"diff",lmax)
+		@assert all(x->typeof(x)==scat_αβlml_ket,diff_lookup) || all(x->typeof(x)==asym_αβlml_ket,diff_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
+		if length(diff_lookup)==0
+			diff_lookup # return empty vector (3-4 case)
+		elseif typeof(diff_lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		else # asym_ket case
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		end
+	end
+	diff_N=length(unq_diff_lookup)
+	lookup=vcat(unq_iden_lookup,unq_diff_lookup); N=length(lookup)
+    Threads.@threads for B in Bs # iterate over different B fields
+		println("Calculating B=$B on thread $(Threads.threadid())")
+        H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
+        for i=1:N, j=1:N
+            bra, ket = lookup[i], lookup[j]
+            H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
+        end
+        minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy channel is physically relevant
+		ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
+        @assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
+        check_str=create_params_str(coltype,ϵ,B,lmax)
+        if any(f->occursin(check_str,f), existingfiles) # check if data already exists
+            println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
+            continue
+        end
+		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+        try # try/catch in case of bug with this simulation
+            output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
+            lhs2mid_spacing, rhs2mid_spacing)
+            save_output(savedir, output) # save
+        catch e
+            @warn "Error occured running sim. Skipped to next simulation."
+			@show e
+        end # try/catch
+    end # B
 end # function
 
 """ Constant B, different k data generation (logarithmically spaced wavenumbers)
@@ -105,40 +119,54 @@ function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::I
     B::Unitful.BField, coltype::String, lmax::Integer)
     existingfiles=readdir(savedir)
     ks=exp10.(LinRange(kmin,kmax,n))u"bohr^-1" # different wavenumbers to iterate over
-    iden_lookup=unique(αβlml_lookup_generator(coltype,"iden",lmax))
-    iden_N=length(iden_lookup)
-    diff_lookup=unique(αβlml_lookup_generator(coltype,"diff",lmax))
-    diff_N=length(diff_lookup)
-    for (lookup, N) in [(iden_lookup, iden_N), (diff_lookup, diff_N)] # iterating over different groups of channels
-		println("Iterating over iden_ or diff_ channels")
-		N==0 && continue # skip empty group of channels
-        H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
-        for i=1:N, j=1:N
-            bra, ket = lookup[i], lookup[j]
-            H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
+    unq_iden_lookup = let iden_lookup = αβlml_lookup_generator(coltype,"iden",lmax)
+		@assert all(x->typeof(x)==scat_αβlml_ket,iden_lookup) || all(x->typeof(x)==asym_αβlml_ket,iden_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
+		if length(iden_lookup)==0
+			iden_lookup # return empty vector (3-4 case)
+		elseif typeof(iden_lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		else
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		end
+	end
+	iden_N=length(unq_iden_lookup)
+	unq_diff_lookup = let diff_lookup = αβlml_lookup_generator(coltype,"diff",lmax)
+		@assert all(x->typeof(x)==scat_αβlml_ket,diff_lookup) || all(x->typeof(x)==asym_αβlml_ket,diff_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
+		if length(diff_lookup)==0
+			diff_lookup # return empty vector (3-4 case)
+		elseif typeof(diff_lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		else
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+		end
+	end
+	diff_N=length(unq_diff_lookup)
+	lookup=vcat(unq_iden_lookup,unq_diff_lookup); N=length(lookup)
+    H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
+    for j=1:N, i=1:N
+        bra, ket = lookup[i], lookup[j]
+        H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
+    end
+    minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy chanel is physically relevant
+    Threads.@threads for k in ks # iterate over desired wavenumbers
+		println("Calculating k=$k on thread $(Threads.threadid())")
+		ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
+		@assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
+        check_str=create_params_str(coltype,ϵ,B,lmax)
+        if any(f->occursin(check_str,f), existingfiles) # check if data is already calculated
+            println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
+            continue
         end
-        D∞ = unique(eigen(austrip.(H∞)).values)u"hartree" # unique, so as to avoid repeated calculation
-		minV∞=minimum(D∞) # lowest energy chanel is physically relevant
-        Threads.@threads for k in ks # iterate over desired wavenumbers
-			println("Calculating k=$k on thread $(Threads.threadid())")
-			ϵ = (v->auconvert(v+1u"ħ^2"*k^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
-			@assert dimension(ϵ)==dimension(0u"hartree") "ϵ not an energy" # sanity check
-            check_str=create_params_str(coltype,ϵ,B,lmax)
-            if any(f->occursin(check_str,f), existingfiles) # check if data is already calculated
-                println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
-                continue
-            end
-			println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
-            try # try/catch in case of bug with this iteration.
-                output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
-                lhs2mid_spacing, rhs2mid_spacing)
-                save_output(savedir, output) # save
-            catch e
-                @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
-				@show e
-            end # try/catch
-        end # k
-    end # (lookup, N)
+		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+        try # try/catch in case of bug with this iteration.
+            output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
+            lhs2mid_spacing, rhs2mid_spacing)
+            save_output(savedir, output) # save
+        catch e
+            @warn "Error occured running sim(), for ϵ=$ϵ, B=$B. Skipped to next simulation."
+			@show e
+        end # try/catch
+    end # k
 end # function
 
 ###################################Load data####################################
@@ -154,6 +182,7 @@ function load_data(dir,coltype::String,Emin::Unitful.Energy,Emax::Unitful.Energy
     # initialise output
     output=Vector{sim_output}([])
     for f in readdir()
+		occursin(".sim",f) || continue
         occursin(coltype,f) || continue
         fE=let
             SIndex=findfirst(isequal('E'),f)+1

@@ -5,7 +5,7 @@ using Revise
 using UnitfulAtomic, Unitful, LinearAlgebra, OrdinaryDiffEq
 using StaticArrays
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
-using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
+using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate, Potentials
 
 # Callback code by Danny Cocks (edited minorly by Tim Hirsch)
 mutable struct RenormCallback
@@ -56,26 +56,23 @@ D∞ = Vector{Unitful.Energy}(diag(Pinv*H∞*P)) # change to diagonal (channel) 
 isOpen, kOpen, lOpen = Simulate.isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
 Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
 # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
-M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,N,N)
-M_sd, M_Γ = zeros(N,N), zeros(N,N)
-M_zee = zeros(N,N)u"hartree" # H_zee is entirely precalculated (no radial fn)
+M_el = Matrix{Vector{Float64}}(undef,N,N)
+M_sd = M_Γ = zeros(N,N)
+M_zee = M_hfs = zeros(N,N)u"hartree" # H_zee and H_hfs are entirely precalculated
 for i=1:N,j=1:N # fill in coefficient arrays
     M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
     M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
     M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
     M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
+    M_hfs[i,j]=αβlml_eval(H_hfs,lookup[i],lookup[j])
 end
-#const M_el_c = M_el; const M_sd_c = M_sd; const M_Γ_c = M_Γ; const M_zee_c = M_zee;
-
 
 # construct lhs initial conditions
 IC = let AL=[fill(0e0u"bohr",N,N); I]  # all wavefncs vanish, derivs do not
     [P    zeros(N,N)u"bohr";
      zeros(N,N)u"bohr^-1" P]*AL
-  end
-@assert size(IC)==(2N,N) "size(AL)≠2N×N" # sanity check
+end
 
-# solve lhs → mid ← rhs
 # Check length and units of IC
 n = length(lookup) # number of channels
 @assert size(IC)[1]==2*n "Initial condition has wrong number of channels"
@@ -103,31 +100,28 @@ end
 lhs⁰, mid⁰ = austrip(lhs), austrip(mid)
 # strip units from IC
 IC⁰ = austrip.(complex.(IC))
-
-D_times_u=similar(IC⁰) # preallocate
-V = zeros(ComplexF64,n,n)u"hartree" # preallocate
-V⁰= zeros(ComplexF64,n,n) # preallocate
-
 # TISE differential equation
-function TISE(u,p,x)
+function TISE(du,u,p,x)
     # Construct V(R) matrix
-    for i=1:n, j=1:n
-        print("l.115"); @time V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
-        @time V[i,j]+= H_el_radial(M_el[i,j], x*1u"bohr") # electronic
-        @time V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
-        @time V[i,j]+= M_zee[i,j] # Zeeman
-        @time V[i,j]+= αβlml_eval(H_hfs,lookup[i],lookup[j]) # Hyperfine
-        @time V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr")
+    V = zeros(ComplexF64,n,n)u"hartree" # initialise
+    pots = [Singlet(x*1u"bohr"),Triplet(x*1u"bohr"),Quintet(x*1u"bohr")]
+    for j=1:n, i=1:n
+        V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
+        V[i,j]+= M_el[i,j] ⋅ pots # electronic
+        V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
+        V[i,j]+= M_zee[i,j] # Zeeman
+        V[i,j]+= M_hfs[i,j] # Hyperfine
+        V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr")
     end
-    V⁰.=austrip.(V) # strip units from V
-    M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matrix
+    V⁰=austrip.(V) # strip units from V
+    M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matix
     D = ([0*I I
           M 0*I])
-    mul!(D_times_u,D,u)
+    mul!(du,D,u)
     #D*u # ⃗u' = D . ⃗u
 end
 
 # solve
 prob=ODEProblem(TISE,IC⁰,(lhs⁰,mid⁰))
-sol_unitless=solve(prob,Tsit5(),reltol=1e-10,save_start=true,save_end=true,save_everystep=false,dense=false,
-callback=CreateRenormCallback(1e5,size(IC,2)))
+sol_unitless=solve(prob,Tsit5(),reltol=1e-10,save_start=true,save_end=true,
+    save_everystep=false,dense=false,callback=CreateRenormCallback(1e5,size(IC,2)))

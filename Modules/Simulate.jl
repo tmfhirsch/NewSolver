@@ -84,14 +84,15 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
     Nₒ==0 && return zeros(0,0)u"bohr^2", zeros(0)u"bohr^2", zeros(0,0), zeros(0)u"bohr^-1" # trivial case, no need to look at scattering
     # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
-    M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,N,N)
-    M_sd, M_Γ = zeros(N,N), zeros(N,N)
-    M_zee = zeros(N,N)u"hartree" # H_zee is entirely precalculated (no radial fn)
-    for i=1:N,j=1:N # fill in coefficient arrays
+    M_el = Array{Vector{Float64}}(undef,N,N)
+    M_sd = M_Γ = zeros(N,N)
+    M_zee = M_hfs = zeros(N,N)u"hartree" # H_zee and H_hfs are entirely precalculated
+    for j=1:N,i=1:N # fill in coefficient arrays
         M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
         M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
         M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
         M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
+        M_hfs[i,j]=αβlml_eval(H_hfs,lookup[i],lookup[j])
     end
     # initialise locations to reorthogonalise
     lhs2mid_locs = let locs=collect(lhs:lhs2mid_spacing:mid)
@@ -122,8 +123,8 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     end
     @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
     # solve lhs → mid ← rhs
-    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, μ)
-    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, μ)
+    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
+    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
     F = [Pinv zeros(N,N)u"bohr";
@@ -194,6 +195,11 @@ function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
     end
     σ_ion = vcat(iden_σ_ion, diff_σ_ion) # glue together both ion cs vectors
     P = let # patch together the change-of-basis matrix for interpreting
+        if size(iden_P)==(0,0)
+            iden_P = zeros(length(iden_αβ), 1) # no open channels, make a zero vector
+        elseif size(diff_P)==(0,0)
+            diff_P = zeros(length(diff_αβ), 1)  # no open channels, make a zero vector
+        end
         iden_m, iden_n = size(iden_P)
         diff_m, diff_n = size(diff_P)
         [iden_P zeros(iden_m,diff_n)

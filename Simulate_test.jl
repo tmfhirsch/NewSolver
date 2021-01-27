@@ -1,16 +1,18 @@
+using Revise
+
 using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 
-coltype="4-4"; lmax=0; ϵ=1e-12u"hartree"; B=0.0u"T";
+coltype="4-4"; lmax=4; ϵ=-8.518494465927682e-8u"hartree"; B=0.01u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=1e3u"bohr";
-lhs2mid_spacing=1e1u"bohr"; rhs2mid_spacing=1e9u"bohr";
+lhs2mid_spacing=1e1u"bohr"; rhs2mid_spacing=2e9u"bohr";
 μ=0.5*4.002602u"u";
 
 iden_lookup = αβlml_lookup_generator(coltype, "iden", lmax)
 diff_lookup = αβlml_lookup_generator(coltype, "diff", lmax)
 #lookup=test_lookup_generator() # playing around w/ lookup vec of |α≠β⟩ states
-lookup=diff_lookup
+lookup=iden_lookup
 
 N=length(lookup) # total number of computational states, incl. |lml>
 P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
@@ -24,14 +26,15 @@ D∞ = Vector{Unitful.Energy}(diag(Pinv*H∞*P)) # change to diagonal (channel) 
 isOpen, kOpen, lOpen = Simulate.isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
 Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
 # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
-M_el = Array{Tuple{Float64,Float64,Float64},2}(undef,N,N)
-M_sd, M_Γ = zeros(N,N), zeros(N,N)
-M_zee = zeros(N,N)u"hartree" # H_zee is entirely precalculated (no radial fn)
-for i=1:N,j=1:N # fill in coefficient arrays
+M_el = Array{Vector{Float64}}(undef,N,N)
+M_sd = M_Γ = zeros(N,N)
+M_zee = M_hfs = zeros(N,N)u"hartree" # H_zee and H_hfs are entirely precalculated
+for j=1:N,i=1:N # fill in coefficient arrays
     M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
     M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
     M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
     M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
+    M_hfs[i,j]=αβlml_eval(H_hfs,lookup[i],lookup[j])
 end
 
 # initialise locations to reorthogonalise
@@ -70,8 +73,8 @@ BR = let BR = let
 end
 @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
 # solve lhs → mid ← rhs
-AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_Γ, lhs2mid_locs, μ)
-BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_Γ, rhs2mid_locs, μ)
+AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
+BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
 # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
 F = F_matrix(AL, AR, BL, BR)
 Fch = [Pinv zeros(N,N)u"bohr";

@@ -1,6 +1,6 @@
 using Revise
 using Unitful, UnitfulAtomic
-savedir=raw"D:\2021-SummerInternship-Results\20-1-optim"
+savedir=raw"D:\2021-SummerInternship-Results\27-1-test9-yesionrhs200"
 
 const G = 1e-4u"T"
 
@@ -12,7 +12,7 @@ using GenerateData
 #coltype, lmax, Bmin, Bmax, kmin, kmax = "4-4", 0, 0u"T", 0.1u"T",1e-4u"bohr^-1",1e-2u"bohr^-1"
 #gen_diffB_constk_data(savedir,Bmin,Bmax,no_sims,k_fixed,coltype,lmax)
 #gen_diffk_constB_data(savedir,kmin,kmax,no_sims,B_fixed,coltype,lmax)
-
+using Revise
 using Simulate, StateStructures, HalfIntegers, Plots
 """ Scatter plot of elastic cross sections, at different B and constant k"""
 function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax::Unitful.BField,
@@ -32,8 +32,18 @@ function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax:
             push!(Bs, d.B)
         end
     end
-    scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σ (a₀²)",
-    yscale=:log10, legend=false)
+    if length(σs)==0
+        @warn "Data found, but none with desired k. Aborting plot."
+        return nothing
+    end
+    if el_or_ion=="el"
+        plt=scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σₑₗ (a₀²)",
+        yscale=:log10, legend=false, title=coltype*" lmax=$lmax")
+    else
+        plt=scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σᵢₒₙ (a₀²)",
+        legend=false, title=coltype*" lmax=$lmax")
+    end
+    plt
 end
 
 function σ_vs_k_plot(el_or_ion::String,dir::String, kmin::Union{typeof(0u"bohr^-1"),typeof(0e0u"bohr^-1")},
@@ -54,8 +64,18 @@ function σ_vs_k_plot(el_or_ion::String,dir::String, kmin::Union{typeof(0u"bohr^
             push!(ks, d.k[i])
         end
     end
-    scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σₑₗ (a₀²)",
-    yscale=:log10,xscale=:log10,legend=false)
+    if length(σs)==0
+        @warn "Data found, but none with desired k. Aborting plot."
+        return nothing
+    end
+    if el_or_ion=="el"
+        plt=scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σₑₗ (a₀²)",
+        yscale=:log10,xscale=:log10,legend=false, title=coltype*" lmax=$lmax")
+    else
+        plt=scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σᵢₒₙ (a₀²)",
+        xscale=:log10,legend=false, title=coltype*" lmax=$lmax")
+    end
+    plt
 end
 
 #σ_vs_B_plot("el",savedir, Bmin, Bmax, k_fixed, coltype, lmax)

@@ -6,6 +6,7 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
     # Passed initial δ fn, time to expand into SmS basis
     result=0u"hartree" # final energy accumulates in this variable
     # expand out ket
+    # decouple α 𝐒 + 𝐢 = 𝐟
     for ket_mS_α=-ket.α.S:ket.α.S, ket_mi_α=-ket.α.i:ket.α.i
         # skip if the clebschgordan is zero
         clebschgordan(ket.α.S,ket_mS_α, ket.α.i,ket_mi_α, ket.α.f,ket.α.m)==0 && continue
@@ -42,7 +43,7 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
                                   clebschgordan(bra.α.S,bra_mS_α, bra.β.S,bra_mS_β, bra_S,bra_mS)
                             # Zeeman energy is just constant * S
                             S_z = (ket_mS)*1u"ħ"
-                            result += uconvert(u"hartree",-0.5u"e_au/me_au"*gₛ*B*S_z)*coeff
+                            result += coeff*uconvert(u"hartree",-0.5u"e_au/me_au"*gₛ*B*S_z)
                         end # bra S
                     end # bra β
                 end # bra α

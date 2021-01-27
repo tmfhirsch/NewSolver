@@ -8,7 +8,7 @@ export solver, orth_solver
 using Unitful, UnitfulAtomic, LinearAlgebra
 using OrdinaryDiffEq
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
-using StateStructures, Interactions
+using StateStructures, Interactions, Potentials
 
 # Callback code by Danny Cocks (edited minorly by Tim Hirsch)
 mutable struct RenormCallback
@@ -48,7 +48,7 @@ end
     Output: Solution to numerically integrating the TISE, from IC at lhs to rhs."""
 function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
                 IC, ϵ::Unitful.Energy,
-                M_el, M_sd, M_zee, M_Γ,
+                M_el, M_sd, M_zee, M_hfs, M_Γ,
                 lhs::Unitful.Length, rhs::Unitful.Length,
                 μ::Unitful.Mass,
                 callback::DiscreteCallback)
@@ -78,25 +78,23 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
     lhs⁰, rhs⁰ = austrip(lhs), austrip(rhs)
     IC⁰ = austrip.(complex.(IC))
     # TISE differential equation
-    D_times_u = similar(IC⁰) # preallocate to reduce allocations
-    V = zeros(ComplexF64,n,n)u"hartree" # preallocate
-    V⁰= zeros(ComplexF64,n,n) # preallocate
-    function TISE(u,p,x)
+    function TISE(du,u,p,x)
         # Construct V(R) matrix
-        #V = zeros(ComplexF64,n,n)u"hartree" # initialise
-        for i=1:n, j=1:n
+        V = zeros(ComplexF64,n,n)u"hartree" # initialise
+        pots = [Singlet(x*1u"bohr"),Triplet(x*1u"bohr"),Quintet(x*1u"bohr")]
+        for j=1:n, i=1:n
             V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
-            V[i,j]+= H_el_radial(M_el[i,j], x*1u"bohr") # electronic
+            V[i,j]+= M_el[i,j] ⋅ pots # electronic
             V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
             V[i,j]+= M_zee[i,j] # Zeeman
-            V[i,j]+= αβlml_eval(H_hfs,lookup[i],lookup[j]) # Hyperfine
-            V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr")
+            V[i,j]+= M_hfs[i,j] # Hyperfine
+            V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr") #TODO testing
         end
         V⁰=austrip.(V) # strip units from V
         M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matix
         D = ([0*I I
               M 0*I])
-        mul!(D_times_u, D, u)
+        mul!(du,D,u) # pre-allocated du matrix
         #D*u # ⃗u' = D . ⃗u
     end
     # solve
@@ -113,7 +111,7 @@ end
 to last, re-orthogonalising at every interim value."""
 function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
                     IC, ϵ::Unitful.Energy,
-                    M_el, M_sd, M_zee, M_Γ,
+                    M_el, M_sd, M_zee, M_hfs, M_Γ,
                     locs,
                     μ::Unitful.Mass;
                     maxval=1e5) # maxval defines when to renormalise
@@ -132,7 +130,7 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Q,ϵ,M_el,M_sd,M_zee,M_Γ,start,finish,μ,callback)
+        sol=solver(lookup,Q,ϵ,M_el,M_sd,M_zee,M_hfs,M_Γ,start,finish,μ,callback)
         ψ=sol(finish) # solution evaluated at rhs
         @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging
         ψQR=qr(austrip.(ψ)) # units stripped before QR
