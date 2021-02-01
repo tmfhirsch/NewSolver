@@ -12,6 +12,8 @@ using Simulate, StateStructures, Interactions
 const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=2e2u"bohr"
 const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=2e9u"bohr" # no mid←rhs orthog
 const μ=0.5*4.002602u"u"
+#const rrhs=1e3u"bohr"; const rhs2rrhs_spacing=2e2u"bohr" # test
+
 
 const G = 1e-4u"T" # Gauss unit of magnetic flux density
 
@@ -101,7 +103,7 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
             println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
             continue
         end
-		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$(B/G) G on thread $(Threads.threadid()).")
         try # try/catch in case of bug with this simulation
             output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
             lhs2mid_spacing, rhs2mid_spacing)
@@ -157,7 +159,7 @@ function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::I
             println("ϵ=$(ϵ/1u"hartree")Eh, B=$(B/1e-4u"T")G was already calculated.")
             continue
         end
-		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$B on thread $(Threads.threadid()).")
+		println("Simulating CT=$coltype, lmax=$lmax, ϵ=$(ϵ/1u"hartree")Eh, B=$(B/G) G on thread $(Threads.threadid()).")
         try # try/catch in case of bug with this iteration.
             output = sim(coltype, lmax, ϵ, B, lhs, mid, rhs,
             lhs2mid_spacing, rhs2mid_spacing)

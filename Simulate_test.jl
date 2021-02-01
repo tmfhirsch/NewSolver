@@ -4,7 +4,7 @@ using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 
-coltype="4-4"; lmax=4; ϵ=-8.518494465927682e-8u"hartree"; B=0.01u"T";
+coltype="4-4"; lmax=4; ϵ=1.37e-12u"hartree"; B=0.0u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=1e3u"bohr";
 lhs2mid_spacing=1e1u"bohr"; rhs2mid_spacing=2e9u"bohr";
 μ=0.5*4.002602u"u";
@@ -73,7 +73,7 @@ BR = let BR = let
 end
 @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
 # solve lhs → mid ← rhs
-AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
+AR, AL = DC_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
 BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
 # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
 F = F_matrix(AL, AR, BL, BR)
@@ -95,3 +95,5 @@ Pb = let # change of basis matrix for interpreting the cross sections
     P_open_ch = P[:, isOpen] # change of basis matrix with only open channels
     P_open_ch[1:nαβ, 1:lb] # one possibly rectangular block of the change of basis matrix
 end
+
+println(σ_el)

@@ -1,9 +1,4 @@
-#= Contains orth_solver(), re-orthogonalising numerical integrator of the TISE,
-and solver(), the function that does the actual numerical integration 'stints'
-Description last updated 18/12/20 =#
-
-module Solvers
-export solver, orth_solver, DC_solver
+#= Testing Danny's alternative to QR orthogonalisation=#
 
 using Unitful, UnitfulAtomic, LinearAlgebra
 using OrdinaryDiffEq
@@ -159,17 +154,17 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     #@info callback.affect!.transform
     return ψ, IC
 end
-##########################following is testing
+
 """ Generate Hamiltonian at point R given lookup (and B)"""
 function ham(lookup::Union{Vector{scat_αβlml_ket},Vector{asym_αβlml_ket}},
-    R::Unitful.Length, M_el, M_sd, M_zee, M_hfs, μ::Unitful.Mass)
+    R::Unitful.Length, M_el, M_sd, M_zee, M_hfs)
     n = length(lookup)
     V = zeros(n,n)u"hartree"
     pots = [Singlet(R),Triplet(R),Quintet(R)]
     for j=1:n, i=1:n
-        V[i,j] = H_rot(lookup[i],lookup[j], R, μ) # rotational
+        V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
         V[i,j]+= M_el[i,j] ⋅ pots # electronic
-        V[i,j]+= M_sd[i,j]*H_sd_radial(R) # spin-dipole
+        V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
         V[i,j]+= M_zee[i,j] # Zeeman
         V[i,j]+= M_hfs[i,j] # Hyperfine
     end
@@ -203,9 +198,9 @@ function DC_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ke
         sol=solver(lookup,ψ,ϵ,M_el,M_sd,M_zee,M_hfs,M_Γ,start,finish,μ,callback)
         Aend=austrip.(sol(finish)) # solution evaluated at rhs
         @assert !any(abs2.(Aend) .> maxval^2) "renorm didn't work" # debugging
-        opens = let V=ham(lookup,locs[k+1],M_el,M_sd,M_zee,M_hfs,μ) # hamiltonian at this location (stripped, in Eh)
+        opens = let V=ham(lookup,locs[k+1],M_el,M_sd,M_zee,M_hfs) # hamiltonian at this location (stripped, in Eh)
             F = eigen(austrip.(V))
-            F.vectors[:,1:nopen]
+            F.vector[:,1:nopen]
         end
         Bopen = [opens zeros(n,nopen); # [0 ̃I] expressed in hyperfine basis
                  zeros(n,nopen) opens] # [̃I 0]
@@ -225,6 +220,3 @@ function DC_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ke
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
     return ψ, IC
 end
-
-
-end # module

@@ -162,6 +162,7 @@ struct sim_output
 end
 
 """ Runs simulation to give scattering matrices for identical and different lookup vectors.
+Input: coltype, lmax, ϵ, B, lhs, mid, rhs, lhs2mid_spacing, rhs2mid_spacing; μ
     Output: S_output containing S_matrices for iden_ and diff_ |αβ⟩, their
     associated CoB matrices and lookup vectors, plus initial conditions"""
 function sim(coltype::String, lmax::Int, ϵ::Unitful.Energy, B::Unitful.BField,
