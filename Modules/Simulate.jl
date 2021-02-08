@@ -73,27 +73,24 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     ################
     N=length(lookup) # total number of computational states, incl. |lml>
     P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*
-    # generate 𝐤sq, vector of asymptotic k² values for channels
-    H∞=Array{Unitful.Energy,2}(zeros(N,N)u"hartree") # initialise H∞, comp basis asymptotic hamiltonian
-    for i=1:N, j=1:N
-        H∞[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)+αβlml_eval(H_hfs,lookup[i],lookup[j]) # only H_zee and H_hfs at infinite distance
+    # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
+    M_el = fill(zeros(3),N,N)
+    M_sd, M_Γ = zeros(N,N), zeros(N,N)
+    M_zee, M_hfs = zeros(N,N)u"hartree", zeros(N,N)u"hartree" # H_zee and H_hfs are entirely precalculated
+    for j=1:N,i=1:N # fill in coefficient arrays
+        M_el[i,j]+=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
+        M_sd[i,j]+=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
+        M_Γ[i,j]+=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
+        M_zee[i,j]+=αβlml_eval(H_zee,lookup[i],lookup[j],B)
+        M_hfs[i,j]+=αβlml_eval(H_hfs,lookup[i],lookup[j])
     end
+    # generate 𝐤sq, vector of asymptotic k² values for channels
+    H∞ = M_zee .+ M_hfs
     D∞ = Vector{Unitful.Energy}(diag(Pinv*H∞*P)) # change to diagonal (channel) basis
     @assert length(D∞)==N "length(ksq) ≠ length(lookup)" # sanity check
     isOpen, kOpen, lOpen = isklOpen(D∞, ϵ, μ, lookup) # kOpen, lOpen used for K_matrix later
     Nₒ=count(isOpen) # number of open channels (not summing over l ml yet)
     Nₒ==0 && return zeros(0,0)u"bohr^2", zeros(0)u"bohr^2", zeros(0,0), zeros(0)u"bohr^-1" # trivial case, no need to look at scattering
-    # precalculate M_el, M_sd, M_zee, M_Γ coefficient matrices
-    M_el = Array{Vector{Float64}}(undef,N,N)
-    M_sd = M_Γ = zeros(N,N)
-    M_zee = M_hfs = zeros(N,N)u"hartree" # H_zee and H_hfs are entirely precalculated
-    for j=1:N,i=1:N # fill in coefficient arrays
-        M_el[i,j]=αβlml_eval(H_el_coeffs,lookup[i],lookup[j])
-        M_sd[i,j]=αβlml_eval(H_sd_coeffs,lookup[i],lookup[j])
-        M_Γ[i,j]=αβlml_eval(Γ_GMS_coeffs,lookup[i],lookup[j])
-        M_zee[i,j]=αβlml_eval(H_zee,lookup[i],lookup[j],B)
-        M_hfs[i,j]=αβlml_eval(H_hfs,lookup[i],lookup[j])
-    end
     # initialise locations to reorthogonalise
     lhs2mid_locs = let locs=collect(lhs:lhs2mid_spacing:mid)
         if locs[end]!=mid # in case the spacing doesn't match up, do an extra, shorter stint to finish at the right location
@@ -123,8 +120,8 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     end
     @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
     # solve lhs → mid ← rhs
-    AR, AL = orth_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
-    BL, BR = orth_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
+    AR, AL = QR_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
+    BL, BR = DC_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
     F = [Pinv zeros(N,N)u"bohr";
