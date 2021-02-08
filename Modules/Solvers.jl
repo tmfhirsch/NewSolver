@@ -3,7 +3,7 @@ and solver(), the function that does the actual numerical integration 'stints'
 Description last updated 18/12/20 =#
 
 module Solvers
-export solver, orth_solver, DC_solver
+export solver, QR_solver, DC_solver
 
 using Unitful, UnitfulAtomic, LinearAlgebra
 using OrdinaryDiffEq
@@ -30,7 +30,7 @@ function (obj::RenormCallback)(int)
     for i = eachindex(int.sol.u)
         int.sol.u[i] ./= maxval
     end
-    @assert size(maxval)==(1,length(obj.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
+    @assert length(obj.transform)==1 || size(maxval)==(1,length(obj.transform)) "length(obj.transform)≠0 ⩓ size(maxval)≠(1,length(obj.transform))" # sanity check
     obj.transform ./= vec(maxval) # can't directly broadcast a vector with a 1xN matrix
     @debug "Renormalised" int.t
     obj.debug_counter+=1
@@ -85,10 +85,10 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
         for j=1:n, i=1:n
             V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
             V[i,j]+= M_el[i,j] ⋅ pots # electronic
-            V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
+            V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipol
             V[i,j]+= M_zee[i,j] # Zeeman
             V[i,j]+= M_hfs[i,j] # Hyperfine
-            V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr") #TODO testing
+            V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr") #TODO turned off for testing
         end
         V⁰=austrip.(V) # strip units from V
         M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matix
@@ -103,13 +103,14 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
     callback=callback)
     # add units back
     units = vcat(fill(1.0u"bohr",n),fill(1.0,n))
-    sol = x -> sol_unitless(austrip(x)).*units # TODO see notes 12/10
+    sol = x -> sol_unitless(austrip(x)).*units
+    #println("Integrated $lhs to $rhs, renormalsed $(callback.affect!.debug_counter) times.") # debugging
     return sol
 end
 
 """Re-orthogonalising DE solver. Takes a list of R values and solves from first
 to last, re-orthogonalising at every interim value."""
-function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
+function QR_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1},Vector{test_ket}},
                     IC, ϵ::Unitful.Energy,
                     M_el, M_sd, M_zee, M_hfs, M_Γ,
                     locs,
@@ -125,7 +126,6 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
     callback=CreateRenormCallback(maxval,ncols)
     # initialise Q, R arrays
     Q, Rcum = IC, Matrix(I,ncols,ncols) # Qs and Rs we will use
-    # old code, when I stored Qs and Rs; Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making Q have units
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
@@ -135,31 +135,28 @@ function orth_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_
         @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging
         ψQR=qr(austrip.(ψ)) # units stripped before QR
         Q = Matrix(ψQR.Q).*units # latest Q matrix
-        # old code, when I stored Qs and Rs; push!(Qs,Matrix(ψQR.Q).*units) # save orthogonalised soln w/ units
-        # renorm QR.R
         R=ψQR.R
-        maxR=maximum(abs.(R), dims=1)
-        R ./= maxR # normalise R
-        callback.affect!.transform ./= vec(maxR) # save renorm in transform
-        Rcum = R*Rcum # multiply in the R matrices, instead of storing them all
-        # old code, when I stored Qs and Rs; push!(Rs,R) # save R
-        #=# debugging
-        let Qmax=maximum(sqrt.(abs2.(austrip.(Qs[k]))))
-            Rmax=maximum(sqrt.(abs2.(Rs[k])))
-            @info "k=$k, maxQ=$Qmax, maxR=$Rmax"
-        end=#
+        @debug "Finished integrating $(start) to $(finish), cond(ψ)=$(cond(austrip.(ψ)))"
+        Rcum *= inv(R)
+        @debug "cond(Rcum)=$(cond(Rcum))"
+        #@show (maximum(abs.(R),dims=1)) # debugging
+        #@show (maximum(abs.(inv(R)),dims=1)) # debugging
     end
-    ψ = Q*Rcum
-    # old code, when I stored Qs and Rs; ψ=Qs[end] # at this point Q[end] is the Q of the final solution
-    # old code, when I stored Qs and Rs; for R in reverse(Rs)
-    # old code, when I stored Qs and Rs;     ψ=ψ*R # reverse the orthogonalisation process
-    # old code, when I stored Qs and Rs; end
+    ψ=Q
+    #@show Rcum # debugging
+    IC *= Rcum
+    # optionally renormalise ψ
+    if any(abs2.(austrip.(ψ)) .> maxval^2)
+        colmaxes = sqrt.(maximum(abs2.(austrip.(ψ)), dims=1))
+        ψ ./= colmaxes
+        @assert size(colmaxes)==(1,length(callback.affect!.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
+        callback.affect!.transform ./= vec(colmaxes) # can't directly broadcast a vector with a 1xN matrix
+    end
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
-    #@info "Integrating $(locs[1]) → $(locs[end]), renormalised $(callback.affect!.debug_counter) times"
-    #@info callback.affect!.transform
     return ψ, IC
 end
-##########################following is testing
+
+#################################DC's idea, alternative to QR re-orthogonalisation##########################
 """ Generate Hamiltonian at point R given lookup (and B)"""
 function ham(lookup::Union{Vector{scat_αβlml_ket},Vector{asym_αβlml_ket}},
     R::Unitful.Length, M_el, M_sd, M_zee, M_hfs, μ::Unitful.Mass)
@@ -195,33 +192,37 @@ function DC_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ke
     callback=CreateRenormCallback(maxval,ncols)
     # initialise Q, R arrays
     ψ, Rcum = IC, Matrix(I,ncols,ncols) # Qs and Rs we will use
-    # old code, when I stored Qs and Rs; Qs, Rs = Array{Any}([IC]), Array{Any}([Matrix(I,ncols,ncols)])
     units=vcat(fill(1e0u"bohr",n),fill(1e0,n)) # units, for making sol have units
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
         sol=solver(lookup,ψ,ϵ,M_el,M_sd,M_zee,M_hfs,M_Γ,start,finish,μ,callback)
-        Aend=austrip.(sol(finish)) # solution evaluated at rhs
-        @assert !any(abs2.(Aend) .> maxval^2) "renorm didn't work" # debugging
+        A=austrip.(sol(finish)) # solution evaluated at end of stint
+        @assert !any(abs2.(A) .> maxval^2) "renorm didn't work" # debugging
         opens = let V=ham(lookup,locs[k+1],M_el,M_sd,M_zee,M_hfs,μ) # hamiltonian at this location (stripped, in Eh)
             F = eigen(austrip.(V))
             F.vectors[:,1:nopen]
         end
         Bopen = [opens zeros(n,nopen); # [0 ̃I] expressed in hyperfine basis
                  zeros(n,nopen) opens] # [̃I 0]
-        C = Bopen' * Aend # projection of the solution onto subspace of open channels
-        D = Aend - (Bopen * C) # subtract from the solution the bits in the subspace
+        C = Bopen' * A # projection of the solution onto subspace of open channels
+        D = A - (Bopen * C) # subtract from the solution the bits in the subspace
         Bclosed = svd(D).U[:,1:nclosed] # solns represented by closed channels
         B = [Bopen Bclosed]
         ψ = B.*units # save solution, ready to go into the next step
-        # renorm R
-        R = Aend\B # linear combination to go from Aend to B
-        maxR=maximum(abs.(R), dims=1)
-        R ./= maxR # normalise R
-        callback.affect!.transform ./= vec(maxR) # save renorm in transform
-        Rcum = R*Rcum # multiply in the R matrices, instead of storing them all
+        R=A\B
+        @debug "Finished integrating $(start) to $(finish), cond(A)=$(cond(A)), cond(B)=$(cond(B)), cond(R)=$(cond(R))"
+        Rcum *= R
+        @debug "cond(Rcum)=$(cond(Rcum))"
     end
-    ψ *= Rcum # retractively apply linear orthogonalising changes
+    IC *= Rcum
+    # optionally renormalise ψ
+    if any(abs2.(austrip.(ψ)) .> maxval^2)
+        colmaxes = sqrt.(maximum(abs2.(austrip.(ψ)), dims=1))
+        ψ ./= colmaxes
+        @assert size(colmaxes)==(1,length(callback.affect!.transform)) "size(maxval)≠(1,length(obj.transform))" # sanity check
+        callback.affect!.transform ./= vec(colmaxes) # can't directly broadcast a vector with a 1xN matrix
+    end
     IC *= diagm(callback.affect!.transform) # retroactively apply identical renormalisation to IC
     return ψ, IC
 end
