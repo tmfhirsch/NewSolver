@@ -22,7 +22,7 @@ function K_matrix(R, 𝐅, 𝐤, 𝐥)
     #construct G, G' matrices to match for A, B with
     n=Int(size(𝐅,1)/2) # n = number of channels. Assumes sol in above form.
     @assert size(𝐅,2) == n "solution matrix not of shape 2n × n"
-    G, G⁻ = austrip.(copy(𝐅[1:n,1:n])), copy(𝐅[n+1:2*n,1:n])
+    G, G⁻ = austrip.(𝐅[1:n,1:n]), 𝐅[n+1:2*n,1:n]
     # solve for A,B
     A, B = zeros(ComplexF64,n,n), zeros(ComplexF64,n,n) # initialise
     for i in 1:n, j in 1:n
