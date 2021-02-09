@@ -9,8 +9,8 @@ push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHY
 using Simulate, StateStructures, Interactions
 
 """ Parameters """
-const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=2e2u"bohr"
-const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=5e1u"bohr" # no mid←rhs orthog
+const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=1e4u"bohr"
+const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=1e1u"bohr"
 const μ=0.5*4.002602u"u"
 #const rrhs=1e3u"bohr"; const rhs2rrhs_spacing=2e2u"bohr" # test
 

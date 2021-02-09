@@ -121,7 +121,7 @@ function blackbox(lookup::Union{Vector{asym_αβlml_ket},Vector{scat_αβlml_ket
     @assert size(BR)==(2N,N+Nₒ) "size(BR)≠2N×(N+Nₒ)" # sanity check
     # solve lhs → mid ← rhs
     AR, AL = QR_solver(lookup, AL, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, lhs2mid_locs, μ)
-    BL, BR = DC_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
+    BL, BR = QR_solver(lookup, BR, ϵ, M_el, M_sd, M_zee, M_hfs, M_Γ, rhs2mid_locs, μ)
     # match to find 𝐅=[𝐆; 𝐆'] at rhs which satisfies both BCs
     F = F_matrix(AL, AR, BL, BR)
     F = [Pinv zeros(N,N)u"bohr";
