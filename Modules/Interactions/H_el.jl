@@ -1,6 +1,7 @@
 """ Coupling function: (bra,ket) -> (c₁,c₂,c₃) coefficients,
     where <bra|H_el|ket> = c₁*¹V(R)+c₃*³V(R)+c₅*⁵V(R)"""
 function H_el_coeffs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
+    bra.l, bra.ml == ket.l, ket.ml || return [0.,0.,0 # diagonal in l, ml
     C¹,C³,C⁵ = 0,0,0 # 'tallying' the different couplings => integers
     # expand out ket
     for ket_mS_α=-ket.α.S:ket.α.S, ket_mi_α=-ket.α.i:ket.α.i
