@@ -14,6 +14,7 @@ const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=1e1u"bohr"
 const μ=0.5*4.002602u"u"
 #const rrhs=1e3u"bohr"; const rhs2rrhs_spacing=2e2u"bohr" # test
 
+rhs *= 1.1 # TODO investigating resonance location dependence
 
 const G = 1e-4u"T" # Gauss unit of magnetic flux density
 

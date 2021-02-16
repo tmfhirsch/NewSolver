@@ -5,7 +5,7 @@ push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHY
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 
 
-coltype="3-4"; lmax=2; B=1e-1u"T"; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
+coltype="4-4"; lmax=0; B=1e-1u"T"; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=1e4u"bohr";
 lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=1e1u"bohr";
 μ=0.5*4.002602u"u";

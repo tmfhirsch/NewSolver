@@ -51,7 +51,8 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
                 M_el, M_sd, M_zee, M_hfs, M_Γ,
                 lhs::Unitful.Length, rhs::Unitful.Length,
                 μ::Unitful.Mass,
-                callback::DiscreteCallback)
+                callback::DiscreteCallback;
+                C=nothing)
     # Check length and units of IC
     n = length(lookup) # number of channels
     @assert size(IC)[1]==2*n "Initial condition has wrong number of channels"
@@ -83,12 +84,12 @@ function solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ket,1
         V = zeros(ComplexF64,n,n)u"hartree" # initialise
         pots = [Singlet(x*1u"bohr"),Triplet(x*1u"bohr"),Quintet(x*1u"bohr")]
         for j=1:n, i=1:n
-            V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ) # rotational
+            V[i,j] = H_rot(lookup[i],lookup[j], x*1u"bohr", μ, C) # rotational
             V[i,j]+= M_el[i,j] ⋅ pots # electronic
-            V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipol
+            V[i,j]+= M_sd[i,j]*H_sd_radial(x*1u"bohr") # spin-dipole
             V[i,j]+= M_zee[i,j] # Zeeman
             V[i,j]+= M_hfs[i,j] # Hyperfine
-            V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr") #TODO turned off for testing
+            #V[i,j]+= M_Γ[i,j]*Γ_GMS_radial(x*1u"bohr") #TODO turned off for testing
         end
         V⁰=austrip.(V) # strip units from V
         M = (-2μ⁰/ħ⁰^2)*(ϵ⁰*I-V⁰) # double derivative matix
@@ -115,7 +116,8 @@ function QR_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ke
                     M_el, M_sd, M_zee, M_hfs, M_Γ,
                     locs,
                     μ::Unitful.Mass;
-                    maxval=1e5) # maxval defines when to renormalise
+                    maxval=1e5,
+                    C=nothing) # maxval defines when to renormalise
     # sanity checks on Rs
     @assert length(locs)>=2 "length(locs) < 2"
     @assert all(x->dimension(x)==dimension(1u"m"),locs) "Not all R ∈ locs are lengths"
@@ -130,7 +132,7 @@ function QR_solver(lookup::Union{Array{asym_αβlml_ket,1},Array{scat_αβlml_ke
     for k=1:(length(locs)-1)
         start, finish = locs[k], locs[k+1] # start and finish bounds
         # solve, last stored Q being the IC
-        sol=solver(lookup,Q,ϵ,M_el,M_sd,M_zee,M_hfs,M_Γ,start,finish,μ,callback)
+        sol=solver(lookup,Q,ϵ,M_el,M_sd,M_zee,M_hfs,M_Γ,start,finish,μ,callback,C=C)
         ψ=sol(finish) # solution evaluated at rhs
         @assert !any(abs2.(austrip.(ψ)) .> maxval^2) "renorm didn't work" # debugging
         ψQR=qr(austrip.(ψ)) # units stripped before QR

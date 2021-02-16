@@ -53,4 +53,9 @@ function H_zee(bra::asym_αβlml_ket,ket::asym_αβlml_ket,B::Unitful.BField)
     result
 end
 
-H_zee(bra::test_ket, ket::test_ket, B::Unitful.BField)=0u"hartree"
+function H_zee(bra::test_ket, ket::test_ket, B::Unitful.BField)
+    bra == ket || return 1e-9u"hartree" # coupling
+    ket.x == true && return 0u"hartree" # open channel
+    ket.x == false && return 1u"hartree" # closed channel
+    @error "I'm not sure how I got here"
+end

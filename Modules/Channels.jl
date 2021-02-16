@@ -56,7 +56,7 @@ function P_Pinv(lookup::Vector{test_ket},B::Unitful.BField)
     H∞ = Matrix{Unitful.Energy}(zeros(n,n)u"hartree")
     for i=1:n, j=1:n
         bra, ket = lookup[i], lookup[j]
-        H∞[i,j] = H_hfs(bra,ket)
+        H∞[i,j] = αβlml_eval(H_hfs,bra,ket) + αβlml_eval(H_zee,bra,ket,B)
     end
     P=eigen(austrip.(H∞)).vectors
     Pinv=inv(P)

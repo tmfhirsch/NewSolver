@@ -19,10 +19,4 @@ function H_hfs(bra::asym_αβlml_ket,ket::asym_αβlml_ket)
 end
 
 # test
-function H_hfs(bra::test_ket, ket::test_ket)
-    bra != ket && return 5e-9u"hartree" # off-diagonals
-    bra.x == 1 && return 0e0u"hartree" # x=1 diag
-    bra.x == 2 && return 1e-8u"hartree" # x=2 diag
-    @assert bra.x==3 "Unexpected bra.x value" # sanity check
-    return 5e-8u"hartree" # x=3 diag
-end
+H_hfs(bra::test_ket, ket::test_ket) = 0u"hartree"

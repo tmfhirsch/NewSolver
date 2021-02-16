@@ -149,19 +149,19 @@ end
 
 # Testing
 struct test_ket
-    x::Int # identifies
-    l::Int # angular momentum
-    test_ket(x) = x∈[1,2,3] ? new(x,0) : error("x=$x is an invalid entry for test_ket")
+    x::Bool # identifies as closed or open. TRUE = OPEN, FALSE = CLOSED
+    l::Int
+    ml::Int
+    test_ket(x) = new(x,0,0)
 end
 
 function test_lookup_generator()
     lookup=Vector{test_ket}([])
-    for i=1:3
-        push!(lookup,test_ket(i))
-    end
+    push!(lookup,test_ket(true))
+    push!(lookup,test_ket(false))
     lookup
 end
 
-αβlml_eval(op, bra::test_ket, ket::test_ket, p...)=op(bra,ket,p...)
+αβlml_eval(op, bra::test_ket, ket::test_ket, p...)=op(bra,ket,p...) # no need for symmetrisation
 
 end # module

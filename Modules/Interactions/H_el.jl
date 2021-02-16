@@ -62,4 +62,4 @@ function H_el_radial(cs::Tuple{Float64,Float64,Float64}, R::Unitful.Length)
 end =#
 
 # test
-H_el_coeffs(bra::test_ket, ket::test_ket) = (0,0,0)
+H_el_coeffs(bra::test_ket, ket::test_ket) = [0,0,0]
