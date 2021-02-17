@@ -1,6 +1,6 @@
 using Revise
 using Unitful, UnitfulAtomic
-savedir=raw"D:\2021-SummerInternship-Results\15-2-noion-3"
+savedir=raw"D:\2021-SummerInternship-Results\18-2-test"
 
 const G = 1e-4u"T"
 

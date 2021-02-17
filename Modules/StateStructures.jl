@@ -37,6 +37,7 @@ struct scat_αβlml_ket
     scat_αβlml_ket(α,β,l,ml) = α.i==β.i && abs(ml)<=l ? new(α,β,l,ml) : error("i₁≠i₂ || abs(mₗ)>l")
 end
 
+
 # evaluator of matrix elements for symmetric or asymmetric states
 function αβlml_eval(op,
     bra::Union{scat_αβlml_ket,asym_αβlml_ket}, ket::Union{scat_αβlml_ket,asym_αβlml_ket},
@@ -63,7 +64,7 @@ end
 function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
     # sanity checks
     @assert coltype ∈ ["3-3","3-4","4-4"] "coltype ∉ [3-3,3-4,4-4]"
-    @assert sameness ∈ ["iden","diff"] "sameness ∉ [iden, diff]"
+    @assert sameness ∈ ["iden","diff","all"] "sameness ∉ [iden, diff, all]"
     @assert lmax >= 0 "lmax < 0"
     Sₐ,Sᵦ = 1, 1 # He* => atomic spin 1
     if coltype=="3-4" # asymmetric case
@@ -78,7 +79,7 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
                             for mᵦ=(-fᵦ):fᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 # only store |α==β⟩ or |α!=β⟩ as desired
-                                sameness=="diff" ||  continue # simplifies for 3-4
+                                sameness=="all" || sameness=="diff" || continue # simplifies for 3-4
                                 state=asym_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end # mᵦ
@@ -100,7 +101,7 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
                                 # only store |α==β⟩ or |α!=β⟩ as desired
-                                (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
+                                sameness=="all" || (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
                                 state=scat_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end #mᵦ
@@ -128,7 +129,7 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
                                 # only store |α==β⟩ or |α!=β⟩ as desired
-                                (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
+                                sameness=="all" || (sameness=="iden" && α==β) || (sameness=="diff" && α!=β) || continue
                                 state=scat_αβlml_ket(α,β,l,ml)
                                 push!(lookup,state)
                             end #mᵦ

@@ -12,6 +12,8 @@ using LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, StateStructures
 
+# Old code, from when I separated iden_ and diff_ lookups
+#=
 """ Input: lookup (all α=β ⊻ all α≠β), B
     Output: P, Pinv --- both ~ n×n where n=length(lookup) --- and P-block --- for interpreting channels."""
 function P_Pinv(lookup::Union{Vector{scat_αβlml_ket},Vector{asym_αβlml_ket}},
@@ -61,6 +63,75 @@ function P_Pinv(lookup::Vector{test_ket},B::Unitful.BField)
     P=eigen(austrip.(H∞)).vectors
     Pinv=inv(P)
     P, Pinv
+end
+=#
+#######################Single lookup code#######################################
+
+""" returns eigenvectors of the l0 and (if applicable) l1 blocks
+    Input: lookup vector, B-field
+    Output: matrices of l0 eigenvectors and (if applicable) l1 eigenvectors"""
+function Peven_Podd(lookup::Union{Array{scat_αβlml_ket,1},Array{asym_αβlml_ket,1}},
+                        B::Unitful.BField)
+    n=length(lookup) # number of states
+    # if lmax=0, only return a single matrix
+    if isnothing(findfirst(ϕ->ϕ.l==1,lookup))
+        # compute asymptotic hamiltonian for l=0 ⟺ for all of lookup
+        H∞=Array{Unitful.Energy,2}(zeros(n,n)u"hartree")
+        for i=1:n, j=1:n
+            H∞[i,j] =αβlml_eval(H_zee,lookup[i],lookup[j],B)
+            H∞[i,j]+=αβlml_eval(H_hfs,lookup[i],lookup[j])
+        end
+        eig=eigen(austrip.(H∞))
+        return eig.vectors
+    end
+    # lmax ≧ 1 case. First, identify l=1 indices
+    l1start=findfirst(ϕ->ϕ.l==1,lookup) # start of l=1 part
+    l1end = let l2start=findfirst(ϕ->ϕ.l==2,lookup)
+        isnothing(l2start) ? n : l2start-1 # lmax=1 case ⟹ go to end of lookup
+    end
+    H∞_l0=Array{Unitful.Energy,2}(zeros(l1start-1,l1start-1)u"hartree")
+    for i=1:(l1start-1), j=1:(l1start-1)
+        H∞_l0[i,j] =αβlml_eval(H_zee,lookup[i],lookup[j],B)
+        H∞_l0[i,j]+=αβlml_eval(H_hfs,lookup[i],lookup[j])
+    end
+    eig_l0=eigen(austrip.(H∞_l0))
+    # separate out first third of l=1, corresponding to ml=-l=-1
+    n_l1=l1end-l1start+1 # number of l=1 lookup entries
+    n_mlm1=Int(n_l1/3) # 1/3 of above = number of mₗ=-1 entries
+    H∞_mlm1=Array{Unitful.Energy,2}(zeros(n_mlm1,n_mlm1)u"hartree")
+    for i=1:n_mlm1, j=1:n_mlm1
+        H∞_mlm1[i,j] =αβlml_eval(H_zee,lookup[i+l1start-1],lookup[j+l1start-1],B)
+        H∞_mlm1[i,j]+=αβlml_eval(H_hfs,lookup[i+l1start-1],lookup[j+l1start-1])
+    end
+    eig_mlm1=eigen(austrip.(H∞_mlm1))
+    return eig_l0.vectors, eig_mlm1.vectors
+end
+
+"""Return channel-to-computational change of basis matrix, a block-diag matrix
+    where each column is an eigenvector (a channel) expressed in the comp basis
+    Input: lookup, B
+    Output: 𝐏, the change-of-basis matrix, size n×n where n=length(lookup), 𝐏⁻¹"""
+function P_Pinv(lookup::Union{Array{scat_αβlml_ket,1},Array{asym_αβlml_ket,1}},
+                        B::Unitful.BField)
+    Peo=Peven_Podd(lookup,B) # P_even_odd, eigenvecs for the even and odd blocks
+    typeof(Peo)==Tuple{Array{Float64,2},Array{Float64,2}} || return Peo, inv(Peo) # lmax=0 case, done immediately
+    n=length(lookup)
+    lmax=lookup[end].l # lookup vector ordered from l=0:lmax
+    𝐏=zeros(Float64,n,n) # initialise
+    𝐏inv = zeros(Float64,n,n)
+    Peoinv = inv(Peo[1]), inv(Peo[2])
+    for l=0:lmax
+        𝐌=iseven(l) ? Peo[1] : Peo[2] # change of basis for one ml
+        𝐌inv=iseven(l) ? Peoinv[1] : Peoinv[2]
+        n_l=size(𝐌,1) # number of states per ml
+        start=findfirst(ϕ->ϕ.l==l,lookup) # where the l starts in lookup
+        degen=2l+1 # number of different ml's
+        for k=0:(degen-1)
+            𝐏[(start+k*n_l):(start+(k+1)*n_l-1),(start+k*n_l):(start+(k+1)*n_l-1)]=𝐌
+            𝐏inv[(start+k*n_l):(start+(k+1)*n_l-1),(start+k*n_l):(start+(k+1)*n_l-1)]=𝐌inv
+        end
+    end
+    return 𝐏, 𝐏inv
 end
 
 end # module
