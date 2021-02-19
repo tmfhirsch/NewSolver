@@ -4,26 +4,43 @@ using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 
-
-coltype="4-4"; lmax=2; B=1e-1u"T"; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
+G = 1e-4u"T" # Gauss
+k_desired=1e-4u"bohr^-1"
+coltype="3-3"; lmax=2; B=11999.999999999998*G #B=12000G; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=1e4u"bohr";
 lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=1e1u"bohr";
 μ=0.5*4.002602u"u";
-k_desired=1e-4u"bohr^-1"
-
 
 @assert coltype∈["3-3", "4-4", "3-4"] "coltype not recognised"
-lookup = αβlml_lookup_generator(coltype, "all", lmax)
+unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
+    if typeof(lookup[1])==scat_αβlml_ket
+        unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
+    else # asym case
+        unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
+    end
+end
+unq_N=length(unq_lookup)
+H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
+for i=1:unq_N, j=1:unq_N
+    bra, ket = unq_lookup[i], unq_lookup[j]
+    H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
+end
+minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy channel is physically relevant
+ϵ = (v->auconvert(v+1u"ħ^2"*k_desired^2/(2*μ)))(minV∞) # energy to make low-energy channel desired wavenumber
 
-ϵ = let N=length(lookup)
+#=ϵ = let N=length(lookup)
     H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
     for i=1:N, j=1:N
         bra, ket = lookup[i], lookup[j]
         H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
     end
     minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy channel is physically relevant
-    (v->auconvert(v+1u"ħ^2"*k_desired^2/(2*μ)))(minV∞)
-end
+    ϵ=(v->auconvert(v+1u"ħ^2"*k_desired^2/(2*μ)))(minV∞)
+    @assert isreal(ϵ) "ϵ is not real"
+    real(ϵ)
+end=#
+
+lookup = αβlml_lookup_generator(coltype, "all", lmax)
 
 #=
 #####################################TEST#######################################

@@ -63,34 +63,19 @@ function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitf
     println("Desired k=$k, iterating over $n B-fields from $Bmin to $Bmax.")
     existingfiles=readdir(savedir)
     Bs=LinRange(Bmin,Bmax,n) # different magnetic fields to iterate over
-	unq_iden_lookup = let iden_lookup = αβlml_lookup_generator(coltype,"iden",lmax)
-		@assert all(x->typeof(x)==scat_αβlml_ket,iden_lookup) || all(x->typeof(x)==asym_αβlml_ket,iden_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
-		if length(iden_lookup)==0
-			iden_lookup # return empty vector (3-4 case)
-		elseif typeof(iden_lookup[1])==scat_αβlml_ket
-			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		else # asym_ket_case
-			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+	unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
+		if typeof(lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
+		else # asym case
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
 		end
 	end
-	iden_N=length(unq_iden_lookup)
-	unq_diff_lookup = let diff_lookup = αβlml_lookup_generator(coltype,"diff",lmax)
-		@assert all(x->typeof(x)==scat_αβlml_ket,diff_lookup) || all(x->typeof(x)==asym_αβlml_ket,diff_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
-		if length(diff_lookup)==0
-			diff_lookup # return empty vector (3-4 case)
-		elseif typeof(diff_lookup[1])==scat_αβlml_ket
-			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		else # asym_ket case
-			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		end
-	end
-	diff_N=length(unq_diff_lookup)
-	lookup=vcat(unq_iden_lookup,unq_diff_lookup); N=length(lookup)
+	N=length(unq_lookup)
     Threads.@threads for B in Bs # iterate over different B fields
 		println("Calculating B=$B on thread $(Threads.threadid())")
         H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
         for i=1:N, j=1:N
-            bra, ket = lookup[i], lookup[j]
+            bra, ket = unq_lookup[i], unq_lookup[j]
             H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
         end
         minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy channel is physically relevant
@@ -119,32 +104,17 @@ function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::I
     B::Unitful.BField, coltype::String, lmax::Integer)
     existingfiles=readdir(savedir)
     ks=exp10.(LinRange(kmin,kmax,n))u"bohr^-1" # different wavenumbers to iterate over
-    unq_iden_lookup = let iden_lookup = αβlml_lookup_generator(coltype,"iden",lmax)
-		@assert all(x->typeof(x)==scat_αβlml_ket,iden_lookup) || all(x->typeof(x)==asym_αβlml_ket,iden_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
-		if length(iden_lookup)==0
-			iden_lookup # return empty vector (3-4 case)
-		elseif typeof(iden_lookup[1])==scat_αβlml_ket
-			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		else
-			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(iden_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
+	unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
+		if typeof(lookup[1])==scat_αβlml_ket
+			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
+		else # asym case
+			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(lookup))
 		end
 	end
-	iden_N=length(unq_iden_lookup)
-	unq_diff_lookup = let diff_lookup = αβlml_lookup_generator(coltype,"diff",lmax)
-		@assert all(x->typeof(x)==scat_αβlml_ket,diff_lookup) || all(x->typeof(x)==asym_αβlml_ket,diff_lookup) "I've wrongly assumed lookup only has one type of ket" # Sanity checl
-		if length(diff_lookup)==0
-			diff_lookup # return empty vector (3-4 case)
-		elseif typeof(diff_lookup[1])==scat_αβlml_ket
-			unique((ket->scat_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		else
-			unique((ket->asym_αβlml_ket(ket.α,ket.β,0,0)).(diff_lookup)) # possible unphysical ket, just used to calc H_hfs+H_zee
-		end
-	end
-	diff_N=length(unq_diff_lookup)
-	lookup=vcat(unq_iden_lookup,unq_diff_lookup); N=length(lookup)
+	N=length(unq_lookup)
     H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
     for j=1:N, i=1:N
-        bra, ket = lookup[i], lookup[j]
+        bra, ket = unq_lookup[i], unq_lookup[j]
         H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)
     end
     minV∞=(eigen(austrip.(H∞)).values[1])u"hartree" # lowest energy chanel is physically relevant

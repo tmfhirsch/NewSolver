@@ -1,6 +1,6 @@
 using Revise
 using Unitful, UnitfulAtomic
-savedir=raw"D:\2021-SummerInternship-Results\18-2-test"
+savedir=raw"D:\2021-SummerInternship-Results\19-2-test-phaseblind"
 
 const G = 1e-4u"T"
 
@@ -38,11 +38,14 @@ function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax:
     end
     if el_or_ion=="el"
         plt=scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σₑₗ (a₀²)",
-        yscale=:log10, legend=false, title=coltype*" lmax=$lmax")
+        yscale=:log10, legend=false, title=coltype*" lmax=$lmax",
+        markershape=:x, markerstrokewidth=1, markersize=2)
     else
         plt=scatter(Bs./(1G), σs./(1u"bohr^2"), xlabel="B (G)", ylabel="σᵢₒₙ (a₀²)",
-        legend=false, title=coltype*" lmax=$lmax")
+        legend=false, title=coltype*" lmax=$lmax",
+        markershape=:x, markerstrokewidth=1, markersize=2)
     end
+    @show Bs[findmin(σs)[2]]
     plt
 end
 
@@ -70,10 +73,12 @@ function σ_vs_k_plot(el_or_ion::String,dir::String, kmin::Union{typeof(0u"bohr^
     end
     if el_or_ion=="el"
         plt=scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σₑₗ (a₀²)",
-        yscale=:log10,xscale=:log10,legend=false, title=coltype*" lmax=$lmax")
+        yscale=:log10,xscale=:log10,legend=false, title=coltype*" lmax=$lmax",
+        markershape=:x, markerstrokewidth=1, markersize=2)
     else
         plt=scatter(ks./(1u"bohr^-1"), σs./(1u"bohr^2"), xlabel="k (a₀⁻¹)", ylabel="σᵢₒₙ (a₀²)",
-        xscale=:log10,legend=false, title=coltype*" lmax=$lmax")
+        xscale=:log10,legend=false, title=coltype*" lmax=$lmax",
+        markershape=:x, markerstrokewidth=1, markersize=2)
     end
     plt
 end

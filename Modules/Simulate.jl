@@ -55,6 +55,38 @@ end
 """ function to strip the |l ml> numbers off an αβlml ket """
 lml_stripper(ket::Union{asym_αβlml_ket, scat_αβlml_ket}) = αβ_ket(ket.α,ket.β)
 
+"""unique() but using isapprox instead of isequal"""
+function unique_approx(A)
+    U = []
+    for a in A
+        if !any(u->isapprox(a, u), U)
+            push!(U, a)
+        end
+    end
+    U
+end
+
+"""changes vectors of coefficients that differ only by a phase to be equal"""
+function ignore_phase!(vec::Vector{Vector{Float64}})
+    n = length(vec)
+    for i=1:n
+        v = vec[i]
+        for j=i:n # only iterate forwards to avoid unnecessary double counting (this fn still does unnecessary work but it's acceptable)
+            dp = v ⋅ vec[j] # dot product
+            if dp≈0 # orthogonal case
+                continue # skip this j
+            elseif abs(dp)≈1 # identical, up to a phase
+                vec[j]=v # overwrite the w vector with v, so that they have the same phase
+            else # this should never trigger
+                @warn "Two vectors are neither orthogonal nor different up to a phase"
+            end
+        end
+    end
+    vec
+end
+
+end
+
 """ Generates index list indicating which rows/columns of S are alike/different,
     by comparing the linear combinations of |αβ⟩ states, sans |lmₗ⟩ numbers.
     Input: Scattering matrix ~ Nₒ×Nₒ; isOpen ~ N; change of basis P matrix ~ N×N; lookup ~ N
@@ -72,12 +104,12 @@ function αβ_index(S::Matrix{ComplexF64}, isOpen::Vector{Bool}, P::Matrix{Float
     αβs = unique(lml_stripper.(lookup)) # unique |αβ⟩ numbers
     nαβ = length(αβs)
     vec = Vector{Vector{Float64}}() # initialise final output
-    for j=1:Nₒ # iterate across rows/cols of P
+    for j=1:Nₒ # iterate across cols of P
         jth_vec = zeros(nαβ) # initialise
         Pindex=findall(isOpen)[j] # index of corresponding eigenvector in P
         eigenvec=P[:,Pindex] # eigenvector corresponding to this row/col in S
         for i=1:N # iterate down rows of this eigenvector
-            eigenvec[i]==0 && continue # skip zero rows
+            eigenvec[i]≈0 && continue # skip zero rows
             this_αβ = lml_stripper(lookup[i])
             this_αβ_index = findfirst(isequal(this_αβ),αβs) # number of this nonzero represented αβ
             @assert !isnothing(this_αβ_index) "Did not find a matching αβ" # sanity check
@@ -86,12 +118,14 @@ function αβ_index(S::Matrix{ComplexF64}, isOpen::Vector{Bool}, P::Matrix{Float
         push!(vec,jth_vec) # save index vector for this row/col of S
     end
     @assert length(vec)==Nₒ "length(vec) ≠ Nₒ" # sanity check
+    # overwrite vectors that only differ by a phase to make them identical
+    ignore_phase!(vec)
     # now use that vector of vectors to create an index list
-    unq_vecs = unique(vec); nch=length(unq_vecs) # nch = number of different open channels. σ matrices ~ nch × nch
+    unq_vecs = unique_approx(vec); nch=length(unq_vecs) # nch = number of different open channels. σ matrices ~ nch × nch
     @assert nch <= Nₒ "Too many different channels detected"
     indices=zeros(Int,Nₒ)
     for j=1:Nₒ # iterate through the rows/columns of S
-        indices[j] = findfirst(isequal(vec[j]), unq_vecs)
+        indices[j] = findfirst(v->isapprox(vec[j],v), unq_vecs) # isapprox bc floating point errors arise for 3-3
     end
     return indices, unq_vecs, αβs
 end
