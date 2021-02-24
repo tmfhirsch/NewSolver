@@ -85,8 +85,6 @@ function ignore_phase!(vec::Vector{Vector{Float64}})
     vec
 end
 
-end
-
 """ Generates index list indicating which rows/columns of S are alike/different,
     by comparing the linear combinations of |αβ⟩ states, sans |lmₗ⟩ numbers.
     Input: Scattering matrix ~ Nₒ×Nₒ; isOpen ~ N; change of basis P matrix ~ N×N; lookup ~ N

@@ -1,6 +1,6 @@
 using Revise
 using Unitful, UnitfulAtomic
-savedir=raw"D:\2021-SummerInternship-Results\19-2-test-phaseblind"
+savedir=raw"D:\2021-SummerInternship-Results\final\aa-noion"
 
 const G = 1e-4u"T"
 
@@ -45,7 +45,8 @@ function σ_vs_B_plot(el_or_ion::String,dir::String, Bmin::Unitful.BField, Bmax:
         legend=false, title=coltype*" lmax=$lmax",
         markershape=:x, markerstrokewidth=1, markersize=2)
     end
-    @show Bs[findmin(σs)[2]]
+    #@show Bs[findmin(σs)[2]]
+    println("Data from $savedir")
     plt
 end
 
@@ -80,6 +81,7 @@ function σ_vs_k_plot(el_or_ion::String,dir::String, kmin::Union{typeof(0u"bohr^
         xscale=:log10,legend=false, title=coltype*" lmax=$lmax",
         markershape=:x, markerstrokewidth=1, markersize=2)
     end
+    println("Data from $savedir")
     plt
 end
 
