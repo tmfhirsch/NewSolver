@@ -10,7 +10,7 @@ using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 B=0e0u"T"; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
 lhs=3e0u"bohr"; mid=1.4e1u"bohr"; rhs=1.5e1u"bohr";
 lhs2mid_spacing=1e-1u"bohr"; rhs2mid_spacing=1e-1u"bohr";
-μ=0.5*4.002602u"u";
+μ=0.5*4.002602u"u"; # 4-4 case
 
 function restest(C::Unitful.Energy)
     lookup=test_lookup_generator() # playing around w/ lookup vec of |α≠β⟩ states

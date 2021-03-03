@@ -5,11 +5,20 @@ matrices and initial conditions all together
 Description last updated 21/12/2020 =#
 
 module Simulate
-export sim, sim_output
+export sim, sim_output, μcalc
 
 using UnitfulAtomic, Unitful, LinearAlgebra
 push!(LOAD_PATH,raw"C:\Users\hirsc\OneDrive - Australian National University\PHYS4110\Code\NewSolver\Modules")
 using Interactions, Channels, matchF, matchK, StateStructures, Solvers
+
+const m4He = 4.002602u"u" # mass of m4He
+const m3He = 3.0160293u"u" # mass of m3He
+function μcalc(coltype::String)
+    @assert coltype ∈ ["3-3","3-4","4-4"] "μcalc() recieved an unrecognised coltype"
+    coltype=="3-3" && return 0.5*m3He
+    coltype=="3-4" && return (m4He*m3He)/(m3He+m4He)
+    coltype=="4-4" && return 0.5*m4He
+end
 
 # old code, from when I separated iden_ and diff_ lookups
 #=
@@ -206,9 +215,9 @@ function sim(coltype::String, lmax::Integer,
     ϵ::Unitful.Energy, B::Unitful.BField,
     lhs::Unitful.Length, mid::Unitful.Length,
     rhs::Unitful.Length,
-    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length;
-    μ::Unitful.Mass=0.5*4.002602u"u")
+    lhs2mid_spacing::Unitful.Length, rhs2mid_spacing::Unitful.Length)
     @assert coltype∈["3-3", "4-4", "3-4"] "coltype not recognised"
+    μ=μcalc(coltype)
     lookup=αβlml_lookup_generator(coltype,"all",lmax)
     N=length(lookup) # total number of computational states, incl. |lml>
     P, Pinv = P_Pinv(lookup,B) # change-of-basis matrix, *from channel to computational basis*

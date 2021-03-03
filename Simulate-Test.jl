@@ -6,10 +6,10 @@ using Interactions, Channels, matchF, matchK, StateStructures, Solvers, Simulate
 
 G = 1e-4u"T" # Gauss
 k_desired=1e-4u"bohr^-1"
-coltype="3-3"; lmax=2; B=11999.999999999998*G #B=12000G; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
+coltype="3-4"; lmax=1; B=0G #B=12000G; #ϵ=-4.257945202650538e-9u"hartree"; B=0.0005u"T";
 lhs=3e0u"bohr"; mid=5e1u"bohr"; rhs=1e4u"bohr";
 lhs2mid_spacing=1e9u"bohr"; rhs2mid_spacing=1e1u"bohr";
-μ=0.5*4.002602u"u";
+μ=μcalc(coltype)
 
 @assert coltype∈["3-3", "4-4", "3-4"] "coltype not recognised"
 unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
@@ -20,7 +20,7 @@ unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
     end
 end
 unq_N=length(unq_lookup)
-H∞ = Matrix{Unitful.Energy}(zeros(N,N)u"hartree") # intialise
+H∞ = Matrix{Unitful.Energy}(zeros(unq_N,unq_N)u"hartree") # intialise
 for i=1:unq_N, j=1:unq_N
     bra, ket = unq_lookup[i], unq_lookup[j]
     H∞[i,j]=αβlml_eval(H_zee, bra, ket, B)+αβlml_eval(H_hfs, bra, ket)

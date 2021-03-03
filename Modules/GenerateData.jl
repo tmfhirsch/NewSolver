@@ -11,7 +11,7 @@ using Simulate, StateStructures, Interactions
 """ Parameters """
 const lhs=3e0u"bohr"; const mid=5e1u"bohr"; const rhs=1e4u"bohr"
 const lhs2mid_spacing=1e1u"bohr"; const rhs2mid_spacing=1e1u"bohr"
-const μ=0.5*4.002602u"u"
+
 
 const G = 1e-4u"T" # Gauss unit of magnetic flux density
 
@@ -59,6 +59,7 @@ end
     Inputs: savedir, Bmin, Bmax, n, k, coltype, lmax"""
 function gen_diffB_constk_data(savedir::String, Bmin::Unitful.BField,Bmax::Unitful.BField,n::Integer,
     k::Union{typeof(0e0u"bohr^-1"),typeof(0u"bohr^-1")}, coltype::String, lmax::Int)
+	μ=μcalc(coltype) # generate correct mass
     println("Running gen_diffB_constk_data, $coltype collisions with lmax of $lmax.")
     println("Desired k=$k, iterating over $n B-fields from $Bmin to $Bmax.")
     existingfiles=readdir(savedir)
@@ -102,6 +103,7 @@ end # function
     Inputs: savedir, kmin (exponent), kmax (exponent), n, B, coltype, lmax"""
 function gen_diffk_constB_data(savedir::String, kmin::Number, kmax::Number, n::Integer,
     B::Unitful.BField, coltype::String, lmax::Integer)
+	μ=μcalc(coltype)
     existingfiles=readdir(savedir)
     ks=exp10.(LinRange(kmin,kmax,n))u"bohr^-1" # different wavenumbers to iterate over
 	unq_lookup = let lookup=αβlml_lookup_generator(coltype,"all",lmax)
