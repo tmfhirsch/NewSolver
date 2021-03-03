@@ -96,8 +96,9 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
                 for fₐ=abs(Sₐ-iₐ):(Sₐ+iₐ) # iterate atom α
                     for mₐ=(-fₐ):fₐ
                         α=atom_nos(Sₐ,iₐ,fₐ,mₐ)
-                        for fᵦ=max(fₐ,abs(Sᵦ-iᵦ)):(Sᵦ+iᵦ) # iterate atom β
-                            for mᵦ=max(mₐ,-fᵦ):fᵦ
+                        for fᵦ=abs(Sᵦ-iᵦ):(Sᵦ+iᵦ) # iterate atom β
+                            for mᵦ=-fᵦ:fᵦ
+                                (fₐ,mₐ)<=(fᵦ,mᵦ) || continue # Double counting check: if fₐ == fᵦ, require mₐ <= mᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
                                 # only store |α==β⟩ or |α!=β⟩ as desired
@@ -124,8 +125,9 @@ function αβlml_lookup_generator(coltype::String, sameness::String, lmax::Int)
                 for fₐ=abs(Sₐ-iₐ):(Sₐ+iₐ) # iterate atom α
                     for mₐ=(-fₐ):fₐ
                         α=atom_nos(Sₐ,iₐ,fₐ,mₐ)
-                        for fᵦ=max(fₐ,abs(Sᵦ-iᵦ)):(Sᵦ+iᵦ) # iterate atom β
-                            for mᵦ=max(mₐ,-fᵦ):fᵦ
+                        for fᵦ=abs(Sᵦ-iᵦ):(Sᵦ+iᵦ) # iterate atom β
+                            for mᵦ=-fᵦ:fᵦ
+                                (fₐ,mₐ)<=(fᵦ,mᵦ) || continue # Double counting check: if fₐ == fᵦ, require mₐ <= mᵦ
                                 β=atom_nos(Sᵦ,iᵦ,fᵦ,mᵦ)
                                 α==β && mod(iₐ+iᵦ+l,2)==1 && continue # symmetrisation condition
                                 # only store |α==β⟩ or |α!=β⟩ as desired
